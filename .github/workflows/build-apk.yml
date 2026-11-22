@@ -68,11 +68,11 @@ jobs:
             cp .env.example .env
           fi
 
-      - name: Run unit tests
-        run: gradle :app:testDebugUnitTest --tests "com.example.ExampleUnitTest" --no-daemon
-
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest --tests "com.example.ExampleUnitTest" --no-daemon --stacktrace
 
       - name: Upload APK workflow artifact
         uses: actions/upload-artifact@v4
