@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>SkillConnect – Find Skilled Professionals Near You</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="workspace-shell">
+    <!-- Top Desktop Utility Bar (hidden on narrow mobile screens so mobile view stays 100% authentic) -->
+    <div class="studio-topbar" aria-label="Editor Controls">
+      <div class="studio-topbar-left">
+        <span class="studio-badge">Editable Responsive Web App</span>
+        <span class="studio-hint">Click any button to test navigation, or toggle Live Editor to customize all text, images &amp; URLs.</span>
+      </div>
+      <div class="studio-topbar-actions">
+        <button type="button" id="toggleEditModeBtn" class="studio-btn studio-btn-primary">
+          <span class="dot-indicator" aria-hidden="true"></span>
+          Edit Content &amp; Images
+        </button>
+        <button type="button" id="exportConfigBtn" class="studio-btn">Export Config</button>
+        <button type="button" id="resetConfigBtn" class="studio-btn">Reset</button>
+      </div>
+    </div>
+
+    <div class="workspace-grid">
+      <!-- Primary Responsive Mobile App Container -->
+      <main class="app-frame" id="appFrame">
+        <!-- Mobile Quick-Edit Trigger (only shows via Profile or subtle toggle if needed) -->
+        <div class="mobile-screen" id="mobileScreen">
+          <!-- ==================== VIEW: HOME ==================== -->
+          <section class="view-screen view-active" id="view-home" aria-label="SkillConnect Home">
+            <!-- Dark Emerald Curved Header -->
+            <header class="sc-header" data-edit-section="header">
+              <div class="sc-header-wave" aria-hidden="true"></div>
+              <div class="sc-header-inner">
+                <!-- Logo + Title + Notification Bell -->
+                <div class="sc-brand-row">
+                  <a
+                    href="#home"
+                    class="sc-brand-link"
+                    id="brandLogoTrigger"
+                    data-editable-id="header.brand"
+                    aria-label="SkillConnect Home"
+                  >
+                    <img
+                      id="logoImg"
+                      src="assets/icons/logo-skillconnect.svg"
+                      alt="SkillConnect logo"
+                      class="sc-logo-img"
+                    />
+                    <div class="sc-brand-text">
+                      <h1 class="sc-title" id="brandTitle">
+                        <span class="sc-title-primary" id="brandPrimary">Skill</span><span class="sc-title-accent" id="brandAccent">Connect</span>
+                      </h1>
+                      <p class="sc-subtitle" id="brandSubtitle">Find Skilled Professionals Near You</p>
+                    </div>
+                  </a>
+
+                  <button
+                    type="button"
+                    class="sc-bell-btn"
+                    id="notificationBtn"
+                    data-editable-id="header.notifications"
+                    aria-label="Notifications"
+                  >
+                    <img
+                      id="bellIconImg"
+                      src="assets/icons/bell.svg"
+                      alt="Notifications"
+                      class="sc-bell-icon"
+                    />
+                    <span class="sc-bell-badge" id="notificationBadge">3</span>
+                  </button>
+                </div>
+
+                <!-- Location Selector Pill + Circular GPS Button -->
+                <div class="sc-location-row">
+                  <button
+                    type="button"
+                    class="sc-location-pill"
+                    id="locationBtn"
+                    data-editable-id="header.location"
+                    aria-label="Select location"
+                  >
+                    <img
+                      id="locationPinImg"
+                      src="assets/icons/pin-green.svg"
+                      alt=""
+                      class="sc-pin-sm"
+                    />
+                    <span id="locationText">Karachi, Sindh</span>
+                    <svg class="sc-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <path
+                        d="M5.5 7.5L10 12L14.5 7.5"
+                        stroke="#1F2937"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="button"
+                    class="sc-gps-btn"
+                    id="gpsBtn"
+                    data-editable-id="header.gps"
+                    aria-label="Use current GPS location"
+                    title="Request current GPS location"
+                  >
+                    <img
+                      id="gpsIconImg"
+                      src="assets/icons/gps.svg"
+                      alt="GPS location"
+                      class="sc-gps-icon"
+                    />
+                  </button>
+                </div>
+
+                <!-- Search Field -->
+                <form class="sc-search-form" id="searchForm" role="search" data-editable-id="header.search">
+                  <img
+                    id="searchIconImg"
+                    src="assets/icons/search.svg"
+                    alt=""
+                    class="sc-search-icon"
+                  />
+                  <input
+                    type="search"
+                    id="searchInput"
+                    class="sc-search-input"
+                    placeholder="Search electrician, plumber, AC repair..."
+                    aria-label="Search professionals by name or category"
+                    autocomplete="off"
+                  />
+                  <button type="button" id="clearSearchBtn" class="sc-clear-search hidden" aria-label="Clear search">
+                    &times;
+                  </button>
+                </form>
+              </div>
+            </header>
+
+            <!-- Scrollable Home Body -->
+            <div class="sc-home-body">
+              <!-- Promotional Banner Carousel -->
+              <section class="sc-banner-section" aria-label="Featured Promotion">
+                <div class="sc-banner-card" id="promoBanner" data-editable-id="banner">
+                  <img
+                    id="bannerBgImg"
+                    src="assets/images/banner-bg.svg"
+                    alt="Promotional banner background"
+                    class="sc-banner-bg"
+                  />
+                  <div class="sc-banner-tech-wrap">
+                    <img
+                      id="bannerTechImg"
+                      src="assets/images/hero-technician.jpg"
+                      alt="Verified smiling technician"
+                      class="sc-banner-tech"
+                    />
+                  </div>
+                  <div class="sc-banner-overlay" aria-hidden="true"></div>
+                  <div class="sc-banner-content">
+                    <h2 class="sc-banner-heading" id="bannerHeading">Skilled Help.<br />Just a Tap Away!</h2>
+                    <p class="sc-banner-desc" id="bannerDesc">Find verified professionals<br />near your location</p>
+                    <button
+                      type="button"
+                      class="sc-explore-btn"
+                      id="exploreNowBtn"
+                      data-editable-id="banner.cta"
+                    >
+                      <span id="exploreBtnLabel">Explore Now</span>
+                      <span class="sc-arrow" aria-hidden="true">&#8594;</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="sc-banner-dots" id="bannerDots" role="tablist" aria-label="Banner slides"></div>
+              </section>
+
+              <!-- Popular Categories Grid -->
+              <section class="sc-categories-section" aria-labelledby="popularCategoriesHeading">
+                <div class="sc-section-header">
+                  <h2 class="sc-section-title" id="popularCategoriesHeading" data-editable-id="categories.heading">
+                    Popular Categories
+                  </h2>
+                  <button
+                    type="button"
+                    class="sc-view-all-btn"
+                    id="viewAllBtn"
+                    data-editable-id="categories.viewAll"
+                  >
+                    <span id="viewAllLabel">View All</span>
+                    <span aria-hidden="true">&#8594;</span>
+                  </button>
+                </div>
+
+                <div class="sc-categories-grid" id="categoriesGrid">
+                  <!-- Rendered dynamically from SKILLCONNECT_CONFIG.categories -->
+                </div>
+              </section>
+
+              <!-- Available Near You Section -->
+              <section class="sc-nearby-section" aria-labelledby="availableNearYouHeading">
+                <div class="sc-section-header sc-nearby-header">
+                  <div class="sc-nearby-title-wrap">
+                    <img
+                      id="nearbyPinImg"
+                      src="assets/icons/pin-green.svg"
+                      alt=""
+                      class="sc-nearby-pin"
+                    />
+                    <h2 class="sc-section-title" id="availableNearYouHeading" data-editable-id="nearby.heading">
+                      Available Near You
+                    </h2>
+                  </div>
+                  <button type="button" id="resetFilterChip" class="sc-filter-chip hidden">
+                    Showing: <span id="activeFilterLabel"></span> &times;
+                  </button>
+                </div>
+
+                <div class="sc-professionals-list" id="professionalsList">
+                  <!-- Rendered dynamically from SKILLCONNECT_CONFIG.professionals -->
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <!-- ==================== VIEW: ALL CATEGORIES / CATEGORY LISTINGS ==================== -->
+          <section class="view-screen" id="view-categories" aria-label="Service Categories">
+            <div class="subpage-header">
+              <button type="button" class="subpage-back-btn" data-nav="home" aria-label="Back to Home">&#8592;</button>
+              <div>
+                <h2 class="subpage-title" id="categoriesPageTitle">All Service Categories</h2>
+                <p class="subpage-subtitle" id="categoriesPageSubtitle">Select a trade to view verified local pros</p>
+              </div>
+            </div>
+            <div class="subpage-body">
+              <div class="all-categories-grid" id="allCategoriesContainer"></div>
+              <div class="subpage-divider"></div>
+              <h3 class="subpage-section-label" id="categoryProsHeading">Professionals</h3>
+              <div class="sc-professionals-list" id="categoryProfessionalsList"></div>
+            </div>
+          </section>
+
+          <!-- ==================== VIEW: MAP ==================== -->
+          <section class="view-screen" id="view-map" aria-label="Nearby Professionals Map">
+            <div class="subpage-header">
+              <button type="button" class="subpage-back-btn" data-nav="home" aria-label="Back to Home">&#8592;</button>
+              <div>
+                <h2 class="subpage-title">Nearby Professionals Map</h2>
+                <p class="subpage-subtitle" id="mapLocationSubtitle">Centered around Karachi, Sindh</p>
+              </div>
+              <button type="button" class="subpage-action-pill" id="mapGpsSyncBtn">Sync GPS</button>
+            </div>
+            <div class="subpage-body">
+              <div class="map-canvas" id="interactiveMapCanvas" role="region" aria-label="Interactive nearby map">
+                <div class="map-grid-lines" aria-hidden="true"></div>
+                <div class="map-pulse-ring" aria-hidden="true"></div>
+                <div class="map-user-pin" title="Your current location">
+                  <span>You</span>
+                </div>
+                <div id="mapPinsContainer"></div>
+              </div>
+              <div id="mapSelectedCardContainer" class="map-selected-card-wrap"></div>
+            </div>
+          </section>
+
+          <!-- ==================== VIEW: BOOKINGS ==================== -->
+          <section class="view-screen" id="view-bookings" aria-label="Booking History">
+            <div class="subpage-header">
+              <button type="button" class="subpage-back-btn" data-nav="home" aria-label="Back to Home">&#8592;</button>
+              <div>
+                <h2 class="subpage-title">Booking History</h2>
+                <p class="subpage-subtitle">Direct service requests with zero platform fees</p>
+              </div>
+            </div>
+            <div class="subpage-body" id="bookingsHistoryContainer"></div>
+          </section>
+
+          <!-- ==================== VIEW: PROFILE ==================== -->
+          <section class="view-screen" id="view-profile" aria-label="User Profile">
+            <div class="subpage-header">
+              <button type="button" class="subpage-back-btn" data-nav="home" aria-label="Back to Home">&#8592;</button>
+              <div>
+                <h2 class="subpage-title">My Profile</h2>
+                <p class="subpage-subtitle">Manage account &amp; customize app content</p>
+              </div>
+            </div>
+            <div class="subpage-body">
+              <div class="profile-card">
+                <div class="profile-avatar-circle" id="userProfileInitials">AR</div>
+                <div class="profile-meta">
+                  <h3 id="userProfileNameDisplay">Usman Ahmed</h3>
+                  <p id="userProfileLocationDisplay">Karachi, Sindh</p>
+                </div>
+              </div>
+
+              <form id="userProfileForm" class="stack-form">
+                <label class="field-label">
+                  Full Name
+                  <input type="text" id="userProfileNameInput" value="Usman Ahmed" class="field-input" />
+                </label>
+                <label class="field-label">
+                  Phone Number
+                  <input type="tel" id="userProfilePhoneInput" value="+92 300 5550199" class="field-input" />
+                </label>
+                <label class="field-label">
+                  Default Location
+                  <input type="text" id="userProfileAreaInput" value="Karachi, Sindh" class="field-input" />
+                </label>
+                <button type="submit" class="primary-full-btn">Save Profile</button>
+              </form>
+
+              <div class="profile-editor-callout">
+                <h4>Live Design &amp; Content Editor</h4>
+                <p>Customize every heading, photo, icon, category, charge, and button URL on the home screen.</p>
+                <button type="button" id="openEditorFromProfileBtn" class="outline-full-btn">
+                  Open Live Screen Editor
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- ==================== VIEW: NOTIFICATIONS ==================== -->
+          <section class="view-screen" id="view-notifications" aria-label="Notifications">
+            <div class="subpage-header">
+              <button type="button" class="subpage-back-btn" data-nav="home" aria-label="Back to Home">&#8592;</button>
+              <div>
+                <h2 class="subpage-title">Notifications</h2>
+                <p class="subpage-subtitle">Live dispatch and booking alerts</p>
+              </div>
+              <button type="button" class="subpage-action-pill" id="markAllReadBtn">Mark Read</button>
+            </div>
+            <div class="subpage-body" id="notificationsListContainer"></div>
+          </section>
+
+          <!-- ==================== BOTTOM NAVIGATION BAR ==================== -->
+          <nav class="sc-bottom-nav" id="bottomNav" aria-label="Primary Bottom Navigation" data-editable-id="bottomNav">
+            <!-- Rendered dynamically from SKILLCONNECT_CONFIG.bottomNav -->
+          </nav>
+        </div>
+
+        <!-- ==================== MODALS: LOCATION, PRO DETAIL, BOOKING FORM ==================== -->
+        <div class="sc-modal-backdrop hidden" id="modalBackdrop" role="dialog" aria-modal="true">
+          <div class="sc-modal-sheet" id="modalContent"></div>
+        </div>
+
+        <!-- Toast Feedback -->
+        <div class="sc-toast hidden" id="scToast" role="status" aria-live="polite"></div>
+      </main>
+
+      <!-- ==================== LIVE CONTENT & ASSET EDITOR DRAWER ==================== -->
+      <aside class="editor-panel hidden" id="editorPanel" aria-label="Live Content and Image Editor">
+        <div class="editor-header">
+          <div>
+            <h2>SkillConnect Live Editor</h2>
+            <p>Edit any text, image path, icon, price, or destination URL in real time.</p>
+          </div>
+          <button type="button" id="closeEditorBtn" class="editor-close-btn" aria-label="Close editor">&times;</button>
+        </div>
+        <div class="editor-tabs" id="editorTabs">
+          <button type="button" class="editor-tab active" data-tab="header">Header &amp; Banner</button>
+          <button type="button" class="editor-tab" data-tab="categories">Categories</button>
+          <button type="button" class="editor-tab" data-tab="professionals">Professionals</button>
+          <button type="button" class="editor-tab" data-tab="navigation">Nav &amp; URLs</button>
+        </div>
+        <div class="editor-body" id="editorBody"></div>
+        <div class="editor-footer">
+          <button type="button" id="editorExportBtn" class="studio-btn">Download Config JSON</button>
+          <button type="button" id="editorResetBtn" class="studio-btn">Reset Defaults</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">SkillConnect</string>
+    <string name="tagline">Find Skilled Professionals Near You</string>
+    <string name="free_platform_badge">Free Platform • Pay technician directly after work</string>
+    <string name="sign_in_google">Sign in with Google</string>
+    <string name="enable_location">Enable Live GPS</string>
+    <string name="nav_discover">Home</string>
+    <string name="nav_bookings">Bookings</string>
+    <string name="nav_pro_hub">Pro Hub</string>
+    <string name="nav_profile">Profile</string>
+</resources>

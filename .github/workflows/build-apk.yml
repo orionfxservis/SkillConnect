@@ -1,0 +1,82 @@
+name: Build SkillConnect APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-debug-apk:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.3.1
+
+      - name: Prepare debug keystore
+        run: |
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Prepare environment secrets (.env)
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          if [ -n "$RESEND_API_KEY" ]; then
+            printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY" > .env
+          elif [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest --tests "com.example.ExampleUnitTest" --no-daemon
+
+      - name: Build Debug APK
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: Upload APK workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkillConnect-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Publish direct mobile APK download (GitHub Release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk SkillConnect-debug.apk
+          if gh release view preview-apk >/dev/null 2>&1; then
+            gh release upload preview-apk SkillConnect-debug.apk --clobber
+          else
+            gh release create preview-apk SkillConnect-debug.apk \
+              --title "SkillConnect Mobile Preview APK" \
+              --notes "Latest debug APK built automatically. Tap SkillConnect-debug.apk below on your Android phone to download and install." \
+              --prerelease
+          fi

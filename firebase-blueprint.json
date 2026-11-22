@@ -1,0 +1,245 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile storing role, contact, location, saved technicians, and suspension state.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "defaultArea": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "role": { "type": "string", "enum": ["CUSTOMER", "PROVIDER", "ADMIN"] },
+        "enrolledTechnician": { "type": "boolean" },
+        "suspended": { "type": "boolean" },
+        "savedTechnicianIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "displayName", "email", "phoneNumber", "defaultArea",
+        "latitude", "longitude", "role", "enrolledTechnician", "suspended",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "ServiceCategoryEntity": {
+      "title": "ServiceCategoryEntity",
+      "description": "Super-Admin managed service category with subcategories.",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "name": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "iconKey": { "type": "string" },
+        "subcategories": { "type": "array" },
+        "active": { "type": "boolean" },
+        "sortOrder": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "categoryId", "name", "subtitle", "iconKey", "subcategories",
+        "active", "sortOrder", "createdAt", "updatedAt"
+      ]
+    },
+    "TechnicianProfile": {
+      "title": "TechnicianProfile",
+      "description": "Service Provider listing with multi-category support, personal & professional info, area/GPS coverage, rates, schedule, portfolio, verification status, and dynamic rating.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "gender": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "additionalCategoryIds": { "type": "array" },
+        "subcategory": { "type": "string" },
+        "professionalTitle": { "type": "string" },
+        "expertise": { "type": "string" },
+        "bio": { "type": "string" },
+        "qualification": { "type": "string" },
+        "yearsExperience": { "type": "integer" },
+        "contactPhone": { "type": "string" },
+        "phoneVerified": { "type": "boolean" },
+        "visitCharge": { "type": "string" },
+        "hourlyCharge": { "type": "string" },
+        "dailyCharge": { "type": "string" },
+        "serviceChargeNote": { "type": "string" },
+        "workingDays": { "type": "array" },
+        "availabilityHours": { "type": "string" },
+        "emergencyAvailable": { "type": "boolean" },
+        "city": { "type": "string" },
+        "workingArea": { "type": "string" },
+        "preferredAreas": { "type": "array" },
+        "travelToCustomer": { "type": "boolean" },
+        "serviceRadiusKm": { "type": "integer" },
+        "availableNow": { "type": "boolean" },
+        "listed": { "type": "boolean" },
+        "termsAccepted": { "type": "boolean" },
+        "verificationConsent": { "type": "boolean" },
+        "verificationStatus": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "verifiedBadge": { "type": "boolean" },
+        "adminRemarks": { "type": "string" },
+        "profilePhotoData": { "type": "string" },
+        "portfolioImages": { "type": "array" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "ratingSum": { "type": "integer" },
+        "reviewCount": { "type": "integer" },
+        "averageRating": { "type": "number" },
+        "completedJobs": { "type": "integer" },
+        "lastReviewBookingId": { "type": "string" },
+        "lastCompletedBookingId": { "type": "string" },
+        "locationUpdatedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "fullName", "categoryId", "subcategory", "expertise", "bio",
+        "yearsExperience", "contactPhone", "phoneVerified", "visitCharge", "serviceChargeNote",
+        "availabilityHours", "workingArea", "serviceRadiusKm", "availableNow", "listed",
+        "verificationStatus", "verifiedBadge", "adminRemarks", "profilePhotoData", "portfolioImages",
+        "latitude", "longitude", "ratingSum", "reviewCount", "averageRating", "completedJobs",
+        "locationUpdatedAt", "createdAt", "updatedAt"
+      ]
+    },
+    "ProviderVerificationDoc": {
+      "title": "ProviderVerificationDoc",
+      "description": "PII-isolated CNIC front/back and certificate verification records visible only to owner and Super Admin.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "cnicNumber": { "type": "string" },
+        "cnicPhotoData": { "type": "string" },
+        "cnicBackPhotoData": { "type": "string" },
+        "certificatePhotoData": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "cnicNumber", "cnicPhotoData", "createdAt", "updatedAt"]
+    },
+    "ServiceBooking": {
+      "title": "ServiceBooking",
+      "description": "Direct service booking between customer and provider.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientPhone": { "type": "string" },
+        "technicianId": { "type": "string" },
+        "technicianName": { "type": "string" },
+        "technicianPhone": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "serviceTitle": { "type": "string" },
+        "issueDescription": { "type": "string" },
+        "serviceArea": { "type": "string" },
+        "preferredTime": { "type": "string" },
+        "clientLat": { "type": "number" },
+        "clientLng": { "type": "number" },
+        "status": { "type": "string", "enum": ["REQUESTED", "ACCEPTED", "EN_ROUTE", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        "reviewed": { "type": "boolean" },
+        "participantIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "clientId", "clientName", "clientPhone", "technicianId", "technicianName", "technicianPhone",
+        "categoryId", "serviceTitle", "issueDescription", "serviceArea", "preferredTime",
+        "clientLat", "clientLng", "status", "reviewed", "participantIds", "createdAt", "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Private per-booking chat message.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "participantIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "senderId", "senderName", "text", "participantIds", "createdAt"]
+    },
+    "ServiceReview": {
+      "title": "ServiceReview",
+      "description": "Verified post-service review driving technician dynamic ratings.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "technicianId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "rating": { "type": "integer" },
+        "comment": { "type": "string" },
+        "highlights": { "type": "array" },
+        "approved": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "bookingId", "technicianId", "clientId", "clientName",
+        "rating", "comment", "highlights", "approved", "createdAt"
+      ]
+    },
+    "ServiceComplaint": {
+      "title": "ServiceComplaint",
+      "description": "Customer or provider complaint/report reviewed by Super Admin.",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reportedTechId": { "type": "string" },
+        "reportedTechName": { "type": "string" },
+        "reason": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "INVESTIGATING", "RESOLVED"] },
+        "adminResolution": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "bookingId", "reporterId", "reporterName", "reportedTechId", "reportedTechName",
+        "reason", "description", "status", "adminResolution", "createdAt", "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "UserProfile" },
+      "description": "Private user profiles accessible to owner and Super Admin."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "ServiceCategoryEntity" },
+      "description": "Super-Admin managed service categories and subcategories."
+    },
+    "/technicians/{techId}": {
+      "schema": { "$ref": "TechnicianProfile" },
+      "description": "Service provider directory profiles."
+    },
+    "/provider_verifications/{techId}": {
+      "schema": { "$ref": "ProviderVerificationDoc" },
+      "description": "PII-isolated CNIC verification records."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "ServiceBooking" },
+      "description": "In-app service bookings."
+    },
+    "/bookings/{bookingId}/messages/{messageId}": {
+      "schema": { "$ref": "ChatMessage" },
+      "description": "Private booking-scoped messages."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "ServiceReview" },
+      "description": "Verified completed-job reviews."
+    },
+    "/complaints/{complaintId}": {
+      "schema": { "$ref": "ServiceComplaint" },
+      "description": "Customer/provider complaints moderated by Super Admin."
+    }
+  }
+}

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="bannerGrad" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0%" stop-color="#11383D"/>
+      <stop offset="55%" stop-color="#195259"/>
+      <stop offset="100%" stop-color="#22757C"/>
+    </linearGradient>
+    <linearGradient id="emeraldWave" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#28A65B"/>
+      <stop offset="100%" stop-color="#168344"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="440" fill="url(#bannerGrad)"/>
+  <circle cx="150" cy="400" r="240" fill="#1F696B" opacity="0.28"/>
+  <path d="M740 0C620 130 595 290 660 440H1200V0H740Z" fill="url(#emeraldWave)" opacity="0.88"/>
+  <path d="M785 0C665 135 645 295 705 440H1200V0H785Z" fill="#37BE6F" opacity="0.32"/>
+</svg>

@@ -1,0 +1,6 @@
+{
+  "name": "SkillConnect",
+  "description": "Connect with nearby skilled technicians across service categories, book directly, track live dispatch location, message in-app, and rate service quality.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

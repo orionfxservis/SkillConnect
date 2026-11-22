@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- House Roof & Walls -->
+  <path d="M10 30L32 12L54 30" stroke="#FFFFFF" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M44 14V21.5" stroke="#FFFFFF" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M15 27V51C15 52.6569 16.3431 54 18 54H46C47.6569 54 49 52.6569 49 51V27" stroke="#FFFFFF" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Crossed Wrench & Screwdriver -->
+  <path d="M23 44L41 26" stroke="#F59E0B" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="42.5" cy="24.5" r="4.5" stroke="#F59E0B" stroke-width="3.2" fill="#01372A"/>
+  <path d="M41 44L24 27" stroke="#FBBF24" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M21 24L26 29" stroke="#FBBF24" stroke-width="5.5" stroke-linecap="round"/>
+</svg>

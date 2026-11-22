@@ -1,0 +1,581 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+             'email_verified' in request.auth.token &&
+             request.auth.token.email_verified == true &&
+             'email' in request.auth.token &&
+             request.auth.token.email == 'orionfxservis@gmail.com';
+    }
+
+    // Use isAdmin() only in single-document get/create/update/delete; use isBootstrappedAdmin() in allow list
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+             (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidLatLng(lat, lng) {
+      return (lat is float || lat is int) && lat >= -90.0 && lat <= 90.0 &&
+             (lng is float || lng is int) && lng >= -180.0 && lng <= 180.0;
+    }
+
+    // --- Validation Helpers ---
+    function isValidUserProfile(data) {
+      return data.userId is string && isValidId(data.userId) &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.email is string && data.email.size() <= 120 &&
+             data.phoneNumber is string && data.phoneNumber.size() <= 25 &&
+             data.defaultArea is string && data.defaultArea.size() <= 120 &&
+             isValidLatLng(data.latitude, data.longitude) &&
+             data.role in ['CUSTOMER', 'PROVIDER', 'ADMIN'] &&
+             data.enrolledTechnician is bool &&
+             data.suspended is bool &&
+             (!('savedTechnicianIds' in data) || (data.savedTechnicianIds is list && data.savedTechnicianIds.size() <= 50)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCategoryEntity(data) {
+      return data.categoryId is string && isValidId(data.categoryId) &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 50 &&
+             data.subtitle is string && data.subtitle.size() <= 140 &&
+             data.iconKey is string && data.iconKey.size() >= 1 && data.iconKey.size() <= 40 &&
+             data.subcategories is list && data.subcategories.size() <= 25 &&
+             (data.subcategories.size() == 0 || (data.subcategories[0] is string && data.subcategories[0].size() <= 50)) &&
+             data.active is bool &&
+             data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidTechnicianProfile(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 60 &&
+             data.categoryId is string && data.categoryId.size() >= 2 && data.categoryId.size() <= 60 &&
+             data.subcategory is string && data.subcategory.size() <= 80 &&
+             data.expertise is string && data.expertise.size() >= 2 && data.expertise.size() <= 220 &&
+             data.bio is string && data.bio.size() <= 500 &&
+             data.yearsExperience is int && data.yearsExperience >= 0 && data.yearsExperience <= 70 &&
+             data.contactPhone is string && data.contactPhone.size() >= 5 && data.contactPhone.size() <= 25 &&
+             data.phoneVerified is bool &&
+             data.visitCharge is string && data.visitCharge.size() <= 60 &&
+             data.serviceChargeNote is string && data.serviceChargeNote.size() <= 140 &&
+             data.availabilityHours is string && data.availabilityHours.size() >= 2 && data.availabilityHours.size() <= 80 &&
+             data.workingArea is string && data.workingArea.size() >= 2 && data.workingArea.size() <= 120 &&
+             data.serviceRadiusKm is int && data.serviceRadiusKm >= 1 && data.serviceRadiusKm <= 200 &&
+             data.availableNow is bool &&
+             data.listed is bool &&
+             data.verificationStatus in ['PENDING', 'APPROVED', 'REJECTED'] &&
+             data.verifiedBadge is bool &&
+             data.adminRemarks is string && data.adminRemarks.size() <= 240 &&
+             data.profilePhotoData is string && data.profilePhotoData.size() <= 140000 &&
+             data.portfolioImages is list && data.portfolioImages.size() <= 4 &&
+             isValidLatLng(data.latitude, data.longitude) &&
+             data.ratingSum is int && data.ratingSum >= 0 &&
+             data.reviewCount is int && data.reviewCount >= 0 &&
+             (data.averageRating is float || data.averageRating is int) &&
+             data.averageRating >= 0.0 && data.averageRating <= 5.0 &&
+             data.completedJobs is int && data.completedJobs >= 0 &&
+             isValidTimestamp(data.locationUpdatedAt) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProviderVerification(data) {
+      return data.userId is string && isValidId(data.userId) &&
+             data.cnicNumber is string && data.cnicNumber.size() <= 30 &&
+             data.cnicPhotoData is string && data.cnicPhotoData.size() <= 160000 &&
+             (!('cnicBackPhotoData' in data) || (data.cnicBackPhotoData is string && data.cnicBackPhotoData.size() <= 160000)) &&
+             (!('certificatePhotoData' in data) || (data.certificatePhotoData is string && data.certificatePhotoData.size() <= 160000)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBooking(data) {
+      return data.clientId is string && isValidId(data.clientId) &&
+             data.clientName is string && data.clientName.size() >= 1 && data.clientName.size() <= 60 &&
+             data.clientPhone is string && data.clientPhone.size() >= 5 && data.clientPhone.size() <= 25 &&
+             data.technicianId is string && isValidId(data.technicianId) &&
+             data.technicianName is string && data.technicianName.size() >= 1 && data.technicianName.size() <= 60 &&
+             data.technicianPhone is string && data.technicianPhone.size() >= 5 && data.technicianPhone.size() <= 25 &&
+             data.categoryId is string && isValidId(data.categoryId) &&
+             data.serviceTitle is string && data.serviceTitle.size() >= 2 && data.serviceTitle.size() <= 100 &&
+             data.issueDescription is string && data.issueDescription.size() >= 5 && data.issueDescription.size() <= 600 &&
+             data.serviceArea is string && data.serviceArea.size() >= 2 && data.serviceArea.size() <= 150 &&
+             data.preferredTime is string && data.preferredTime.size() >= 2 && data.preferredTime.size() <= 80 &&
+             isValidLatLng(data.clientLat, data.clientLng) &&
+             data.status in ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] &&
+             data.reviewed is bool &&
+             data.participantIds is list && data.participantIds.size() == 2 &&
+             data.participantIds[0] is string && data.participantIds[1] is string &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidMessage(data) {
+      return data.bookingId is string && isValidId(data.bookingId) &&
+             data.senderId is string && isValidId(data.senderId) &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 500 &&
+             data.participantIds is list && data.participantIds.size() == 2 &&
+             data.participantIds[0] is string && data.participantIds[1] is string &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidReview(data) {
+      return data.bookingId is string && isValidId(data.bookingId) &&
+             data.technicianId is string && isValidId(data.technicianId) &&
+             data.clientId is string && isValidId(data.clientId) &&
+             data.clientName is string && data.clientName.size() >= 1 && data.clientName.size() <= 60 &&
+             data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() >= 2 && data.comment.size() <= 500 &&
+             data.highlights is list && data.highlights.size() <= 5 &&
+             (data.highlights.size() == 0 || (data.highlights[0] is string && data.highlights[0].size() <= 40)) &&
+             data.approved is bool &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidComplaint(data) {
+      return data.bookingId is string && isValidId(data.bookingId) &&
+             data.reporterId is string && isValidId(data.reporterId) &&
+             data.reporterName is string && data.reporterName.size() >= 1 && data.reporterName.size() <= 60 &&
+             data.reportedTechId is string && isValidId(data.reportedTechId) &&
+             data.reportedTechName is string && data.reportedTechName.size() >= 1 && data.reportedTechName.size() <= 60 &&
+             data.reason is string && data.reason.size() >= 2 && data.reason.size() <= 80 &&
+             data.description is string && data.description.size() >= 5 && data.description.size() <= 600 &&
+             data.status in ['OPEN', 'INVESTIGATING', 'RESOLVED'] &&
+             data.adminResolution is string && data.adminResolution.size() <= 400 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    // --- 1. Private User Profiles ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && (request.auth.uid == userId || isBootstrappedAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().role in ['CUSTOMER', 'PROVIDER'] &&
+                       incoming().suspended == false &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'email', 'phoneNumber', 'defaultArea',
+                         'latitude', 'longitude', 'role', 'enrolledTechnician', 'suspended',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'email', 'phoneNumber', 'defaultArea',
+                         'latitude', 'longitude', 'role', 'enrolledTechnician', 'suspended',
+                         'savedTechnicianIds', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         (
+                           request.auth.uid == userId &&
+                           incoming().role in ['CUSTOMER', 'PROVIDER'] &&
+                           incoming().suspended == existing().suspended &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'displayName', 'email', 'phoneNumber', 'defaultArea',
+                             'latitude', 'longitude', 'role', 'enrolledTechnician',
+                             'savedTechnicianIds', 'updatedAt'
+                           ])
+                         ) ||
+                         (
+                           isAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'suspended', 'role', 'updatedAt'
+                           ])
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+    }
+
+    // --- 2. Service Categories & Subcategories (Public Read, Admin Write) ---
+    match /categories/{categoryId} {
+      allow get: if isValidId(categoryId) && (existing().active == true || isAdmin());
+      allow list: if existing().active == true || isBootstrappedAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidId(categoryId) &&
+                       incoming().categoryId == categoryId &&
+                       incoming().keys().hasAll([
+                         'categoryId', 'name', 'subtitle', 'iconKey',
+                         'subcategories', 'active', 'sortOrder', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'categoryId', 'name', 'subtitle', 'iconKey',
+                         'subcategories', 'active', 'sortOrder', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidCategoryEntity(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(categoryId) &&
+                       isValidCategoryEntity(incoming()) &&
+                       incoming().categoryId == existing().categoryId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'subtitle', 'iconKey', 'subcategories', 'active', 'sortOrder', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(categoryId);
+    }
+
+    // --- 3. Service Providers & Live Dispatch Directory (Public Read of Listed Pros, Auth Writes) ---
+    match /technicians/{techId} {
+      allow get: if isValidId(techId) &&
+                    ((existing().listed == true && existing().verificationStatus != 'REJECTED') ||
+                     (isSignedIn() && request.auth.uid == techId) ||
+                     isAdmin());
+
+      allow list: if existing().listed == true || isBootstrappedAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(techId) &&
+                       request.auth.uid == techId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().verificationStatus == 'PENDING' &&
+                       incoming().verifiedBadge == false &&
+                       incoming().adminRemarks == '' &&
+                       incoming().ratingSum == 0 &&
+                       incoming().reviewCount == 0 &&
+                       incoming().averageRating == 0.0 &&
+                       incoming().completedJobs == 0 &&
+                       incoming().keys().hasAll([
+                         'userId', 'fullName', 'categoryId', 'subcategory', 'expertise', 'bio',
+                         'yearsExperience', 'contactPhone', 'phoneVerified', 'visitCharge',
+                         'serviceChargeNote', 'availabilityHours', 'workingArea', 'serviceRadiusKm',
+                         'availableNow', 'listed', 'verificationStatus', 'verifiedBadge', 'adminRemarks',
+                         'profilePhotoData', 'portfolioImages', 'latitude', 'longitude',
+                         'ratingSum', 'reviewCount', 'averageRating', 'completedJobs',
+                         'locationUpdatedAt', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'fullName', 'email', 'gender', 'categoryId', 'additionalCategoryIds',
+                         'subcategory', 'professionalTitle', 'expertise', 'bio', 'qualification',
+                         'yearsExperience', 'contactPhone', 'phoneVerified', 'visitCharge',
+                         'hourlyCharge', 'dailyCharge', 'serviceChargeNote', 'workingDays',
+                         'availabilityHours', 'emergencyAvailable', 'city', 'workingArea',
+                         'preferredAreas', 'travelToCustomer', 'serviceRadiusKm',
+                         'availableNow', 'listed', 'termsAccepted', 'verificationConsent',
+                         'verificationStatus', 'verifiedBadge', 'adminRemarks',
+                         'profilePhotoData', 'portfolioImages', 'latitude', 'longitude',
+                         'ratingSum', 'reviewCount', 'averageRating', 'completedJobs',
+                         'locationUpdatedAt', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidTechnicianProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(techId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action 1: Provider updates own profile, charges, photos, availability, or GPS
+                         (
+                           request.auth.uid == techId &&
+                           incoming().verificationStatus == existing().verificationStatus &&
+                           incoming().verifiedBadge == existing().verifiedBadge &&
+                           incoming().adminRemarks == existing().adminRemarks &&
+                           incoming().ratingSum == existing().ratingSum &&
+                           incoming().reviewCount == existing().reviewCount &&
+                           incoming().averageRating == existing().averageRating &&
+                           incoming().completedJobs == existing().completedJobs &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'fullName', 'email', 'gender', 'categoryId', 'additionalCategoryIds',
+                             'subcategory', 'professionalTitle', 'expertise', 'bio', 'qualification',
+                             'yearsExperience', 'contactPhone', 'phoneVerified', 'visitCharge',
+                             'hourlyCharge', 'dailyCharge', 'serviceChargeNote', 'workingDays',
+                             'availabilityHours', 'emergencyAvailable', 'city', 'workingArea',
+                             'preferredAreas', 'travelToCustomer', 'serviceRadiusKm',
+                             'availableNow', 'listed', 'termsAccepted', 'verificationConsent',
+                             'profilePhotoData', 'portfolioImages',
+                             'latitude', 'longitude', 'locationUpdatedAt', 'updatedAt'
+                           ]) &&
+                           isValidTechnicianProfile(incoming())
+                         ) ||
+                         // Action 2: Provider increments completedJobs atomically on job completion
+                         (
+                           request.auth.uid == techId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'completedJobs', 'lastCompletedBookingId', 'updatedAt'
+                           ]) &&
+                           incoming().completedJobs == existing().completedJobs + 1 &&
+                           ('lastCompletedBookingId' in incoming()) &&
+                           isValidId(incoming().lastCompletedBookingId) &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           exists(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)) &&
+                           get(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.technicianId == techId &&
+                           get(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.status != 'COMPLETED' &&
+                           getAfter(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.status == 'COMPLETED'
+                         ) ||
+                         // Action 3: Verified client review atomically updates dynamic rating
+                         (
+                           request.auth.uid != techId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'ratingSum', 'reviewCount', 'averageRating', 'lastReviewBookingId', 'updatedAt'
+                           ]) &&
+                           ('lastReviewBookingId' in incoming()) &&
+                           isValidId(incoming().lastReviewBookingId) &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           (incoming().averageRating is float || incoming().averageRating is int) &&
+                           incoming().averageRating >= 1.0 && incoming().averageRating <= 5.0 &&
+                           incoming().reviewCount == existing().reviewCount + 1 &&
+                           existsAfter(/databases/$(database)/documents/reviews/$(incoming().lastReviewBookingId)) &&
+                           getAfter(/databases/$(database)/documents/reviews/$(incoming().lastReviewBookingId)).data.clientId == request.auth.uid &&
+                           getAfter(/databases/$(database)/documents/reviews/$(incoming().lastReviewBookingId)).data.technicianId == techId &&
+                           incoming().ratingSum == existing().ratingSum + getAfter(/databases/$(database)/documents/reviews/$(incoming().lastReviewBookingId)).data.rating
+                         ) ||
+                         // Action 4: Super Admin approves/rejects registration or toggles verification
+                         (
+                           isAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'verificationStatus', 'verifiedBadge', 'adminRemarks', 'listed', 'updatedAt'
+                           ]) &&
+                           incoming().verificationStatus in ['PENDING', 'APPROVED', 'REJECTED'] &&
+                           incoming().verifiedBadge is bool &&
+                           incoming().adminRemarks is string && incoming().adminRemarks.size() <= 240 &&
+                           incoming().listed is bool &&
+                           isValidTimestamp(incoming().updatedAt)
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(techId) && (request.auth.uid == techId || isAdmin());
+    }
+
+    // --- 4. PII-Isolated Provider CNIC Verification Docs ---
+    match /provider_verifications/{techId} {
+      allow get: if isSignedIn() && isValidId(techId) && (request.auth.uid == techId || isAdmin());
+      allow list: if isSignedIn() && (request.auth.uid == techId || isBootstrappedAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(techId) &&
+                       request.auth.uid == techId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'cnicNumber', 'cnicPhotoData', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'cnicNumber', 'cnicPhotoData', 'cnicBackPhotoData',
+                         'certificatePhotoData', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidProviderVerification(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(techId) &&
+                       request.auth.uid == techId &&
+                       isValidProviderVerification(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'cnicNumber', 'cnicPhotoData', 'cnicBackPhotoData',
+                         'certificatePhotoData', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(techId) && (request.auth.uid == techId || isAdmin());
+    }
+
+    // --- 5. Service Bookings & Private Dispatch Chat ---
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && isValidId(bookingId) && (request.auth.uid in existing().participantIds || isAdmin());
+      allow list: if isSignedIn() && (request.auth.uid in existing().participantIds || isBootstrappedAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(bookingId) &&
+                       isValidBooking(incoming()) &&
+                       incoming().clientId == request.auth.uid &&
+                       incoming().technicianId != request.auth.uid &&
+                       incoming().participantIds[0] == request.auth.uid &&
+                       incoming().participantIds[1] == incoming().technicianId &&
+                       incoming().status == 'REQUESTED' &&
+                       incoming().reviewed == false &&
+                       incoming().keys().hasAll([
+                         'clientId', 'clientName', 'clientPhone',
+                         'technicianId', 'technicianName', 'technicianPhone',
+                         'categoryId', 'serviceTitle', 'issueDescription',
+                         'serviceArea', 'preferredTime', 'clientLat', 'clientLng',
+                         'status', 'reviewed', 'participantIds', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'clientId', 'clientName', 'clientPhone',
+                         'technicianId', 'technicianName', 'technicianPhone',
+                         'categoryId', 'serviceTitle', 'issueDescription',
+                         'serviceArea', 'preferredTime', 'clientLat', 'clientLng',
+                         'status', 'reviewed', 'participantIds', 'createdAt', 'updatedAt'
+                       ]) &&
+                       exists(/databases/$(database)/documents/technicians/$(incoming().technicianId));
+
+      allow update: if isSignedIn() &&
+                       isValidId(bookingId) &&
+                       isValidBooking(incoming()) &&
+                       incoming().clientId == existing().clientId &&
+                       incoming().technicianId == existing().technicianId &&
+                       incoming().participantIds == existing().participantIds &&
+                       incoming().createdAt == existing().createdAt && (
+                         (
+                           request.auth.uid == existing().clientId &&
+                           existing().status in ['REQUESTED', 'ACCEPTED'] &&
+                           incoming().status == 'CANCELLED' &&
+                           incoming().reviewed == existing().reviewed &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                         ) ||
+                         (
+                           request.auth.uid == existing().technicianId &&
+                           existing().status in ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS'] &&
+                           (
+                             (existing().status == 'REQUESTED' && incoming().status in ['ACCEPTED', 'CANCELLED']) ||
+                             (existing().status == 'ACCEPTED' && incoming().status in ['EN_ROUTE', 'IN_PROGRESS', 'CANCELLED']) ||
+                             (existing().status == 'EN_ROUTE' && incoming().status in ['IN_PROGRESS', 'COMPLETED']) ||
+                             (existing().status == 'IN_PROGRESS' && incoming().status == 'COMPLETED')
+                           ) &&
+                           incoming().reviewed == existing().reviewed &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                         ) ||
+                         (
+                           request.auth.uid == existing().clientId &&
+                           existing().status == 'COMPLETED' &&
+                           existing().reviewed == false &&
+                           incoming().status == 'COMPLETED' &&
+                           incoming().reviewed == true &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['reviewed', 'updatedAt']) &&
+                           existsAfter(/databases/$(database)/documents/reviews/$(bookingId))
+                         ) ||
+                         (
+                           isAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(bookingId) && isValidId(messageId) &&
+                      (request.auth.uid in existing().participantIds || isAdmin());
+        allow list: if isSignedIn() && (request.auth.uid in existing().participantIds || isBootstrappedAdmin());
+
+        allow create: if isSignedIn() &&
+                         isValidId(bookingId) &&
+                         isValidId(messageId) &&
+                         isValidMessage(incoming()) &&
+                         incoming().bookingId == bookingId &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'bookingId', 'senderId', 'senderName', 'text', 'participantIds', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'bookingId', 'senderId', 'senderName', 'text', 'participantIds', 'createdAt'
+                         ]) &&
+                         exists(/databases/$(database)/documents/bookings/$(bookingId)) &&
+                         request.auth.uid in get(/databases/$(database)/documents/bookings/$(bookingId)).data.participantIds &&
+                         incoming().participantIds == get(/databases/$(database)/documents/bookings/$(bookingId)).data.participantIds;
+
+        allow update, delete: if false;
+      }
+    }
+
+    // --- 6. Verified Service Reviews (Public Read of Approved Reviews, Auth Create) ---
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId) && (existing().approved == true || isAdmin());
+      allow list: if existing().approved == true || isBootstrappedAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(reviewId) &&
+                       isValidReview(incoming()) &&
+                       incoming().bookingId == reviewId &&
+                       incoming().clientId == request.auth.uid &&
+                       incoming().approved == true &&
+                       incoming().keys().hasAll([
+                         'bookingId', 'technicianId', 'clientId', 'clientName',
+                         'rating', 'comment', 'highlights', 'approved', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'bookingId', 'technicianId', 'clientId', 'clientName',
+                         'rating', 'comment', 'highlights', 'approved', 'createdAt'
+                       ]) &&
+                       exists(/databases/$(database)/documents/bookings/$(reviewId)) &&
+                       get(/databases/$(database)/documents/bookings/$(reviewId)).data.clientId == request.auth.uid &&
+                       get(/databases/$(database)/documents/bookings/$(reviewId)).data.technicianId == incoming().technicianId &&
+                       get(/databases/$(database)/documents/bookings/$(reviewId)).data.status == 'COMPLETED' &&
+                       get(/databases/$(database)/documents/bookings/$(reviewId)).data.reviewed == false &&
+                       getAfter(/databases/$(database)/documents/bookings/$(reviewId)).data.reviewed == true;
+
+      allow update, delete: if isAdmin();
+    }
+
+    // --- 7. Complaints & Reports (Moderated by Super Admin) ---
+    match /complaints/{complaintId} {
+      allow get: if isSignedIn() && isValidId(complaintId) && (
+        existing().reporterId == request.auth.uid ||
+        existing().reportedTechId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().reporterId == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(complaintId) &&
+                       isValidComplaint(incoming()) &&
+                       incoming().reporterId == request.auth.uid &&
+                       incoming().status == 'OPEN' &&
+                       incoming().adminResolution == '' &&
+                       incoming().keys().hasAll([
+                         'bookingId', 'reporterId', 'reporterName',
+                         'reportedTechId', 'reportedTechName',
+                         'reason', 'description', 'status', 'adminResolution',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'bookingId', 'reporterId', 'reporterName',
+                         'reportedTechId', 'reportedTechName',
+                         'reason', 'description', 'status', 'adminResolution',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       exists(/databases/$(database)/documents/bookings/$(incoming().bookingId));
+
+      allow update: if isAdmin() &&
+                       isValidId(complaintId) &&
+                       isValidComplaint(incoming()) &&
+                       incoming().reporterId == existing().reporterId &&
+                       incoming().bookingId == existing().bookingId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'status', 'adminResolution', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(complaintId);
+    }
+  }
+}
