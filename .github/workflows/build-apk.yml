@@ -60,15 +60,19 @@ jobs:
             fi
           fi
 
-      - name: Prepare environment secrets (.env)
+      - name: Prepare environment secrets (.env & google-services.json)
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           CLEAN_KEY="$(printf '%s' "$RESEND_API_KEY" | tr -d '[:space:]')"
           if [ -n "$CLEAN_KEY" ]; then
             printf 'RESEND_API_KEY=%s\n' "$CLEAN_KEY" > .env
           elif [ ! -f .env ]; then
             cp .env.example .env
+          fi
+          if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s\n' "$GOOGLE_SERVICES_JSON" > app/google-services.json
           fi
 
       - name: Build Debug APK
