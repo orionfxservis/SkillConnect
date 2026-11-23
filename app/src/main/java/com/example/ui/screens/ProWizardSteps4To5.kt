@@ -21,14 +21,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Badge
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +43,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,49 +62,115 @@ import com.example.model.ServiceCategory
 import com.example.model.UserProfile
 import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.OnEmeraldContainer
+import com.example.ui.theme.greenThemeTextFieldColors
 import kotlin.math.roundToLong
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ProWizardStep4Charges(state: ProWizardState) {
+  var editingStartTime by remember { mutableStateOf(false) }
+  var editingEndTime by remember { mutableStateOf(false) }
+
+  val parsedTimes =
+    remember(state.availabilityHours) {
+      parseWorkingHourRange(state.availabilityHours)
+    }
+
+  Surface(
+    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+    shape = RoundedCornerShape(14.dp),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+      Text(
+        text = "Section D – Charges & Availability",
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onPrimaryContainer,
+      )
+      Text(
+        text = "Set your PKR rates, working days, hours, emergency & live status",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
+
+  OutlinedTextField(
+    value = state.visitCharge,
+    onValueChange = { state.visitCharge = it.filter { ch -> ch.isDigit() || ch == ',' } },
+    label = { Text("Visiting Charges (PKR) *") },
+    placeholder = { Text("e.g. 500") },
+    prefix = { Text("PKR ") },
+    singleLine = true,
+    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    shape = RoundedCornerShape(12.dp),
+    colors = greenThemeTextFieldColors(),
+    modifier = Modifier.fillMaxWidth().testTag("enroll_visit_charge_input"),
+  )
+
   Row(
     modifier = Modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     OutlinedTextField(
-      value = state.visitCharge,
-      onValueChange = { state.visitCharge = it },
-      label = { Text("Visit Fee (PKR) *") },
+      value = state.hourlyCharge,
+      onValueChange = { state.hourlyCharge = it.filter { ch -> ch.isDigit() || ch == ',' } },
+      label = { Text("Hourly Charges (PKR)") },
+      placeholder = { Text("Optional") },
+      prefix = { Text("PKR ") },
       singleLine = true,
-      modifier = Modifier.weight(1f).testTag("enroll_visit_charge_input"),
+      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+      shape = RoundedCornerShape(12.dp),
+      colors = greenThemeTextFieldColors(),
+      modifier = Modifier.weight(1f).testTag("enroll_hourly_charge_input"),
     )
     OutlinedTextField(
-      value = state.hourlyCharge,
-      onValueChange = { state.hourlyCharge = it },
-      label = { Text("Hourly Rate (Opt.)") },
+      value = state.dailyCharge,
+      onValueChange = { state.dailyCharge = it.filter { ch -> ch.isDigit() || ch == ',' } },
+      label = { Text("Daily Charges (PKR)") },
+      placeholder = { Text("Optional") },
+      prefix = { Text("PKR ") },
       singleLine = true,
-      modifier = Modifier.weight(1f).testTag("enroll_hourly_charge_input"),
+      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+      shape = RoundedCornerShape(12.dp),
+      colors = greenThemeTextFieldColors(),
+      modifier = Modifier.weight(1f).testTag("enroll_daily_charge_input"),
     )
   }
 
   OutlinedTextField(
-    value = state.dailyCharge,
-    onValueChange = { state.dailyCharge = it },
-    label = { Text("Daily Charges PKR (Optional, e.g. Rs. 3,500/day)") },
-    singleLine = true,
-    modifier = Modifier.fillMaxWidth().testTag("enroll_daily_charge_input"),
-  )
-
-  OutlinedTextField(
     value = state.serviceChargeNote,
     onValueChange = { state.serviceChargeNote = it },
-    label = { Text("Charges Note (e.g. Direct cash after job completion)") },
+    label = { Text("Charges Note (Optional)") },
+    placeholder = { Text("e.g. Direct cash after job completion") },
     singleLine = true,
+    shape = RoundedCornerShape(12.dp),
+    colors = greenThemeTextFieldColors(),
     modifier = Modifier.fillMaxWidth().testTag("enroll_service_charge_input"),
   )
 
   Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Text("Working Days *", style = MaterialTheme.typography.titleSmall)
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text("Working Days (Multi-select) *", style = MaterialTheme.typography.titleSmall)
+      Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        TextButton(
+          onClick = { state.workingDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat") },
+          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+        ) {
+          Text("Mon–Sat", style = MaterialTheme.typography.labelMedium)
+        }
+        TextButton(
+          onClick = { state.workingDays = AllWeekDays },
+          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+        ) {
+          Text("All 7 Days", style = MaterialTheme.typography.labelMedium)
+        }
+      }
+    }
     FlowRow(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -109,14 +182,58 @@ fun ProWizardStep4Charges(state: ProWizardState) {
           onClick = {
             state.workingDays = if (active) state.workingDays - day else state.workingDays + day
           },
+          leadingIcon =
+            if (active) {
+              { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else null,
           label = { Text(day) },
+          modifier = Modifier.testTag("enroll_day_${day.lowercase()}"),
         )
       }
     }
   }
 
-  Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Text("Working Hours *", style = MaterialTheme.typography.titleSmall)
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text("Working Hours (Time selection) *", style = MaterialTheme.typography.titleSmall)
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      OutlinedButton(
+        onClick = { editingStartTime = true },
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+        modifier = Modifier.weight(1f).testTag("enroll_start_time_button"),
+      ) {
+        Icon(Icons.Rounded.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Column(horizontalAlignment = Alignment.Start) {
+          Text("Start Time", style = MaterialTheme.typography.labelSmall)
+          Text(
+            text = formatTime12Hour(parsedTimes.first.first, parsedTimes.first.second),
+            style = MaterialTheme.typography.labelLarge,
+          )
+        }
+      }
+      OutlinedButton(
+        onClick = { editingEndTime = true },
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+        modifier = Modifier.weight(1f).testTag("enroll_end_time_button"),
+      ) {
+        Icon(Icons.Rounded.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Column(horizontalAlignment = Alignment.Start) {
+          Text("End Time", style = MaterialTheme.typography.labelSmall)
+          Text(
+            text = formatTime12Hour(parsedTimes.second.first, parsedTimes.second.second),
+            style = MaterialTheme.typography.labelLarge,
+          )
+        }
+      }
+    }
     Row(
       modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -132,42 +249,121 @@ fun ProWizardStep4Charges(state: ProWizardState) {
     OutlinedTextField(
       value = state.availabilityHours,
       onValueChange = { state.availabilityHours = it },
-      label = { Text("Custom Working Hours *") },
+      label = { Text("Selected Working Hours *") },
       singleLine = true,
+      shape = RoundedCornerShape(12.dp),
+      colors = greenThemeTextFieldColors(),
       modifier = Modifier.fillMaxWidth().testTag("enroll_hours_input"),
     )
   }
 
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text("Available for Emergency Calls", style = MaterialTheme.typography.titleSmall)
-      Text(
-        "Accept urgent breakdowns & after-hours requests",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+  Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Text("Available for Emergency (Optional)", style = MaterialTheme.typography.titleSmall)
+    Text(
+      text =
+        if (state.emergencyAvailable) "Yes — accept urgent breakdowns & after-hours requests"
+        else "No — available during regular scheduled hours only",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      FilterChip(
+        selected = state.emergencyAvailable,
+        onClick = { state.emergencyAvailable = true },
+        leadingIcon =
+          if (state.emergencyAvailable) {
+            { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+          } else null,
+        label = { Text("Yes") },
+        modifier = Modifier.weight(1f).testTag("enroll_emergency_yes"),
+      )
+      FilterChip(
+        selected = !state.emergencyAvailable,
+        onClick = { state.emergencyAvailable = false },
+        leadingIcon =
+          if (!state.emergencyAvailable) {
+            { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+          } else null,
+        label = { Text("No") },
+        modifier = Modifier.weight(1f).testTag("enroll_emergency_no"),
       )
     }
-    Switch(checked = state.emergencyAvailable, onCheckedChange = { state.emergencyAvailable = it })
   }
 
-  Row(
+  Surface(
+    color =
+      if (state.availableNow) EmeraldContainer.copy(alpha = 0.45f)
+      else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+    shape = RoundedCornerShape(14.dp),
+    border =
+      BorderStroke(
+        width = 1.dp,
+        color =
+          if (state.availableNow) MaterialTheme.colorScheme.primary
+          else MaterialTheme.colorScheme.outlineVariant,
+      ),
     modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
   ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text("Available Now Status *", style = MaterialTheme.typography.titleSmall)
-      Text(
-        "Show green Available Now indicator immediately",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
+    Column(
+      modifier = Modifier.padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Icon(
+          Icons.Rounded.PowerSettingsNew,
+          contentDescription = null,
+          tint = if (state.availableNow) OnEmeraldContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(20.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+          Text("Availability Status *", style = MaterialTheme.typography.titleSmall)
+          Text(
+            text =
+              if (state.availableNow) "ON — Showing Available Now to nearby customers"
+              else "OFF — Currently marked offline / unavailable",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state.availableNow) OnEmeraldContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        FilterChip(
+          selected = state.availableNow,
+          onClick = { state.availableNow = true },
+          leadingIcon =
+            if (state.availableNow) {
+              { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else null,
+          colors =
+            FilterChipDefaults.filterChipColors(
+              selectedContainerColor = EmeraldContainer,
+              selectedLabelColor = OnEmeraldContainer,
+              selectedLeadingIconColor = OnEmeraldContainer,
+            ),
+          label = { Text("ON") },
+          modifier = Modifier.weight(1f).testTag("enroll_status_on"),
+        )
+        FilterChip(
+          selected = !state.availableNow,
+          onClick = { state.availableNow = false },
+          leadingIcon =
+            if (!state.availableNow) {
+              { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else null,
+          label = { Text("OFF") },
+          modifier = Modifier.weight(1f).testTag("enroll_status_off"),
+        )
+      }
     }
-    Switch(checked = state.availableNow, onCheckedChange = { state.availableNow = it })
   }
 
   Row(
@@ -185,6 +381,107 @@ fun ProWizardStep4Charges(state: ProWizardState) {
     }
     Switch(checked = state.listed, onCheckedChange = { state.listed = it })
   }
+
+  if (editingStartTime) {
+    WorkingHourPickerDialog(
+      title = "Select Start Time",
+      initialHour = parsedTimes.first.first,
+      initialMinute = parsedTimes.first.second,
+      onConfirm = { hour, minute ->
+        val startFormatted = formatTime12Hour(hour, minute)
+        val endFormatted = formatTime12Hour(parsedTimes.second.first, parsedTimes.second.second)
+        state.availabilityHours = "$startFormatted - $endFormatted"
+        editingStartTime = false
+      },
+      onDismiss = { editingStartTime = false },
+    )
+  }
+
+  if (editingEndTime) {
+    WorkingHourPickerDialog(
+      title = "Select End Time",
+      initialHour = parsedTimes.second.first,
+      initialMinute = parsedTimes.second.second,
+      onConfirm = { hour, minute ->
+        val startFormatted = formatTime12Hour(parsedTimes.first.first, parsedTimes.first.second)
+        val endFormatted = formatTime12Hour(hour, minute)
+        state.availabilityHours = "$startFormatted - $endFormatted"
+        editingEndTime = false
+      },
+      onDismiss = { editingEndTime = false },
+    )
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WorkingHourPickerDialog(
+  title: String,
+  initialHour: Int,
+  initialMinute: Int,
+  onConfirm: (Int, Int) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  val pickerState =
+    rememberTimePickerState(
+      initialHour = initialHour.coerceIn(0, 23),
+      initialMinute = initialMinute.coerceIn(0, 59),
+      is24Hour = false,
+    )
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(title) },
+    text = {
+      Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+      ) {
+        TimePicker(state = pickerState)
+      }
+    },
+    confirmButton = {
+      Button(onClick = { onConfirm(pickerState.hour, pickerState.minute) }) {
+        Text("Set Time")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancel")
+      }
+    },
+  )
+}
+
+private fun formatTime12Hour(hour24: Int, minute: Int): String {
+  val period = if (hour24 >= 12) "PM" else "AM"
+  val hour12 =
+    when (val h = hour24 % 12) {
+      0 -> 12
+      else -> h
+    }
+  return "%02d:%02d %s".format(hour12, minute, period)
+}
+
+private fun parseWorkingHourRange(raw: String): Pair<Pair<Int, Int>, Pair<Int, Int>> {
+  val regex = Regex("(\\d{1,2}):(\\d{2})\\s*(AM|PM)", RegexOption.IGNORE_CASE)
+  val matches = regex.findAll(raw).toList()
+  if (matches.size >= 2) {
+    return parseMatchTo24Hour(matches[0]) to parseMatchTo24Hour(matches[1])
+  }
+  return (8 to 0) to (20 to 0)
+}
+
+private fun parseMatchTo24Hour(match: MatchResult): Pair<Int, Int> {
+  val rawHour = match.groupValues[1].toIntOrNull()?.coerceIn(1, 12) ?: 8
+  val minute = match.groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: 0
+  val isPm = match.groupValues[3].equals("PM", ignoreCase = true)
+  val hour24 =
+    when {
+      isPm && rawHour < 12 -> rawHour + 12
+      !isPm && rawHour == 12 -> 0
+      else -> rawHour
+    }
+  return hour24 to minute
 }
 
 @Composable
@@ -194,8 +491,11 @@ fun ProWizardStep5Documents(
   userProfile: UserProfile?,
   isPhoneVerified: Boolean,
   onPickCnicFront: () -> Unit,
+  onCaptureCnicFront: () -> Unit,
   onPickCnicBack: () -> Unit,
+  onCaptureCnicBack: () -> Unit,
   onPickCertificate: () -> Unit,
+  onCaptureCertificate: () -> Unit,
 ) {
   Surface(
     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -217,23 +517,27 @@ fun ProWizardStep5Documents(
         onValueChange = { state.cnicNumber = it },
         label = { Text("CNIC Number (e.g. 35202-1234567-1)") },
         singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+        colors = greenThemeTextFieldColors(),
         modifier = Modifier.fillMaxWidth(),
       )
 
       DocumentUploadRow(
         title = "CNIC Front Image",
-        subtitle = if (state.cnicPhotoData.isNotEmpty()) "Front CNIC image attached" else "Upload front side for Verified badge",
+        subtitle = if (state.cnicPhotoData.isNotEmpty()) "Front CNIC image attached" else "Upload or capture front side for Verified badge",
         dataUrl = state.cnicPhotoData,
         onPickClick = onPickCnicFront,
+        onCaptureClick = onCaptureCnicFront,
         onClearClick = { state.cnicPhotoData = "" },
         testTag = "enroll_cnic_front_button",
       )
 
       DocumentUploadRow(
         title = "CNIC Back Image",
-        subtitle = if (state.cnicBackPhotoData.isNotEmpty()) "Back CNIC image attached" else "Upload back side of CNIC",
+        subtitle = if (state.cnicBackPhotoData.isNotEmpty()) "Back CNIC image attached" else "Upload or capture back side of CNIC",
         dataUrl = state.cnicBackPhotoData,
         onPickClick = onPickCnicBack,
+        onCaptureClick = onCaptureCnicBack,
         onClearClick = { state.cnicBackPhotoData = "" },
         testTag = "enroll_cnic_back_button",
       )
@@ -243,6 +547,7 @@ fun ProWizardStep5Documents(
         subtitle = if (state.certificatePhotoData.isNotEmpty()) "Certificate attached" else "TEVTA, diploma or workshop license",
         dataUrl = state.certificatePhotoData,
         onPickClick = onPickCertificate,
+        onCaptureClick = onCaptureCertificate,
         onClearClick = { state.certificatePhotoData = "" },
         testTag = "enroll_certificate_button",
       )
@@ -266,7 +571,7 @@ fun ProWizardStep5Documents(
         Text(
           text =
             buildString {
-              append("Secured via Google Sign-In")
+              append("Secured via SkillConnect Account")
               if (!userProfile?.email.isNullOrBlank()) append(" (${userProfile?.email})")
               append(if (isPhoneVerified) " • Mobile OTP Verified" else " • Mobile OTP optional")
             },
@@ -294,7 +599,8 @@ fun ProWizardStep5Documents(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
       Text(
-        text = "Visit Charge: ${state.visitCharge.ifBlank { "Not set" }} • Days: ${state.workingDays.joinToString(", ")}",
+        text =
+          "Visit Charge: ${if (state.visitCharge.isBlank()) "Not set" else "PKR ${state.visitCharge}"} • Status: ${if (state.availableNow) "ON" else "OFF"} • Days: ${state.workingDays.joinToString(", ")}",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -340,6 +646,7 @@ fun DocumentUploadRow(
   subtitle: String,
   dataUrl: String,
   onPickClick: () -> Unit,
+  onCaptureClick: (() -> Unit)? = null,
   onClearClick: () -> Unit,
   testTag: String,
 ) {
@@ -349,57 +656,77 @@ fun DocumentUploadRow(
     }
   Surface(
     shape = RoundedCornerShape(12.dp),
-    color = MaterialTheme.colorScheme.surface,
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.14f),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
     modifier = Modifier.fillMaxWidth(),
   ) {
-    Row(
+    Column(
       modifier = Modifier.padding(10.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      if (bmp != null) {
-        Image(
-          bitmap = bmp,
-          contentDescription = title,
-          contentScale = ContentScale.Crop,
-          modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
-        )
-      } else {
-        Box(
-          modifier =
-            Modifier.size(48.dp)
-              .clip(RoundedCornerShape(8.dp))
-              .background(MaterialTheme.colorScheme.surfaceVariant),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(
-            Icons.Rounded.UploadFile,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        if (bmp != null) {
+          Image(
+            bitmap = bmp,
+            contentDescription = title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+          )
+        } else {
+          Box(
+            modifier =
+              Modifier.size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+          ) {
+            Icon(
+              Icons.Rounded.UploadFile,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+          Text(text = title, style = MaterialTheme.typography.labelLarge)
+          Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
-      }
-      Column(modifier = Modifier.weight(1f)) {
-        Text(text = title, style = MaterialTheme.typography.labelLarge)
-        Text(
-          text = subtitle,
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-      if (dataUrl.isNotEmpty()) {
-        IconButton(onClick = onClearClick, modifier = Modifier.size(36.dp)) {
-          Icon(Icons.Rounded.Close, contentDescription = "Remove $title", modifier = Modifier.size(18.dp))
+        if (dataUrl.isNotEmpty()) {
+          IconButton(onClick = onClearClick, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Rounded.Close, contentDescription = "Remove $title", modifier = Modifier.size(18.dp))
+          }
         }
       }
-      OutlinedButton(
-        onClick = onPickClick,
-        shape = RoundedCornerShape(10.dp),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-        modifier = Modifier.testTag(testTag),
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        Text(if (dataUrl.isNotEmpty()) "Replace" else "Upload", style = MaterialTheme.typography.labelMedium)
+        OutlinedButton(
+          onClick = onPickClick,
+          shape = RoundedCornerShape(10.dp),
+          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+          modifier = Modifier.weight(1f).testTag(testTag),
+        ) {
+          Text(if (dataUrl.isNotEmpty()) "Replace Upload" else "Upload", style = MaterialTheme.typography.labelMedium)
+        }
+        if (onCaptureClick != null) {
+          OutlinedButton(
+            onClick = onCaptureClick,
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.weight(1f).testTag("${testTag}_capture"),
+          ) {
+            Text("Capture", style = MaterialTheme.typography.labelMedium)
+          }
+        }
       }
     }
   }
@@ -453,6 +780,8 @@ fun PhoneOtpDialog(
             label = { Text("Enter 6-digit SMS Code") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            shape = RoundedCornerShape(12.dp),
+            colors = greenThemeTextFieldColors(),
             modifier = Modifier.fillMaxWidth().testTag("otp_code_input"),
           )
         }

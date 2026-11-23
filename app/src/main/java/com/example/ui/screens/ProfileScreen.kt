@@ -22,7 +22,6 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
@@ -45,7 +44,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,7 +59,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.model.ServiceCategory
@@ -101,7 +98,6 @@ fun ProfileScreen(
   onSignOut: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  var showEditProfileEditor by remember { mutableStateOf(false) }
   var showSavedSheet by remember { mutableStateOf(false) }
   var showSettingsSheet by remember { mutableStateOf(false) }
   var showHelpSheet by remember { mutableStateOf(false) }
@@ -180,25 +176,18 @@ fun ProfileScreen(
             title = "My Profile",
             subtitle =
               if (!isSignedIn) "Sign in to save name, phone & neighborhood"
-              else if (showEditProfileEditor) "Tap to collapse profile details"
-              else "Edit display name, contact number & default area",
+              else "Update multi-step profile, photo, CNIC & skills",
             onClick = {
               if (!isSignedIn) {
                 scope.launch { authCardBringIntoView.bringIntoView() }
+              } else if (isEnrolledProvider) {
+                onOpenProHub()
               } else {
-                showEditProfileEditor = !showEditProfileEditor
+                onEnrollTechnicianClick()
               }
             },
             modifier = Modifier.testTag("menu_my_profile"),
           )
-
-          if (isSignedIn && showEditProfileEditor) {
-            InlineProfileEditor(
-              profile = profile,
-              isBusy = isBusy,
-              onSaveProfile = onSaveProfile,
-            )
-          }
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
           AccountMenuRow(
@@ -396,52 +385,6 @@ private fun IdentitySummaryCard(
           modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
       }
-    }
-  }
-}
-
-@Composable
-private fun InlineProfileEditor(
-  profile: UserProfile?,
-  isBusy: Boolean,
-  onSaveProfile: (String, String, String) -> Unit,
-) {
-  var displayName by remember(profile?.userId) { mutableStateOf(profile?.displayName ?: "") }
-  var phoneNumber by remember(profile?.userId) { mutableStateOf(profile?.phoneNumber ?: "") }
-  var defaultArea by remember(profile?.userId) { mutableStateOf(profile?.defaultArea ?: "") }
-  Column(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-    verticalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    OutlinedTextField(
-      value = displayName,
-      onValueChange = { displayName = it },
-      label = { Text("Display Name") },
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth().testTag("profile_name_input"),
-    )
-    OutlinedTextField(
-      value = phoneNumber,
-      onValueChange = { phoneNumber = it },
-      label = { Text("Saved Contact Phone") },
-      singleLine = true,
-      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-      modifier = Modifier.fillMaxWidth().testTag("profile_phone_input"),
-    )
-    OutlinedTextField(
-      value = defaultArea,
-      onValueChange = { defaultArea = it },
-      label = { Text("Default Neighborhood / Address") },
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth().testTag("profile_area_input"),
-    )
-    Button(
-      onClick = { onSaveProfile(displayName, phoneNumber, defaultArea) },
-      enabled = !isBusy && displayName.trim().isNotEmpty(),
-      shape = RoundedCornerShape(14.dp),
-      modifier = Modifier.fillMaxWidth().height(48.dp).testTag("save_profile_button"),
-    ) {
-      Text("Save Profile")
     }
   }
 }

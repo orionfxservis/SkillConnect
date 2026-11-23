@@ -34,6 +34,12 @@ object EmailAuthService {
   private val EMAIL_REGEX = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
   private const val CODE_TTL_MS = 10 * 60 * 1000L
 
+  @Volatile var lastSignUpEmail: String? = null
+    private set
+
+  @Volatile var lastSignUpCategoryId: String? = null
+    private set
+
   fun isValidEmail(raw: String): Boolean {
     val trimmed = raw.trim()
     return trimmed.isNotEmpty() && EMAIL_REGEX.matches(trimmed)
@@ -120,6 +126,7 @@ object EmailAuthService {
     email: String,
     password: String,
     categoryName: String,
+    categoryId: String = "",
   ): EmailAuthResult {
     val cleanEmail = email.trim()
     if (!isValidEmail(cleanEmail)) {
@@ -130,6 +137,10 @@ object EmailAuthService {
     }
     return try {
       val result = Firebase.auth.createUserWithEmailAndPassword(cleanEmail, password).await()
+      lastSignUpEmail = cleanEmail
+      if (categoryId.isNotBlank()) {
+        lastSignUpCategoryId = categoryId
+      }
       val user = result.user
       if (user != null) {
         val displayPrefix = cleanEmail.substringBefore("@").take(40).ifBlank { categoryName }

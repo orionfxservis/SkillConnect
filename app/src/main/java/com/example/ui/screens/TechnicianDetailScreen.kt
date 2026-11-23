@@ -85,6 +85,7 @@ import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.EmeraldLive
 import com.example.ui.theme.OnEmeraldContainer
 import com.example.ui.theme.StarGold
+import com.example.ui.theme.greenThemeTextFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -915,6 +916,8 @@ private fun BookingRequestBottomSheet(
           onValueChange = { clientName = it },
           label = { Text("Your Name") },
           singleLine = true,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("booking_client_name_input"),
         )
         OutlinedTextField(
@@ -922,6 +925,8 @@ private fun BookingRequestBottomSheet(
           onValueChange = { clientPhone = it },
           label = { Text("Your Contact Phone") },
           singleLine = true,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("booking_client_phone_input"),
         )
         OutlinedTextField(
@@ -929,6 +934,8 @@ private fun BookingRequestBottomSheet(
           onValueChange = { serviceTitle = it },
           label = { Text("Issue Summary (e.g. Kitchen breaker tripping)") },
           singleLine = true,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("booking_title_input"),
         )
         OutlinedTextField(
@@ -937,6 +944,8 @@ private fun BookingRequestBottomSheet(
           label = { Text("Details for the technician") },
           minLines = 2,
           maxLines = 4,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("booking_desc_input"),
         )
         OutlinedTextField(
@@ -944,6 +953,8 @@ private fun BookingRequestBottomSheet(
           onValueChange = { serviceArea = it },
           label = { Text("Service Address / Neighborhood") },
           singleLine = true,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("booking_area_input"),
         )
         OutlinedTextField(
@@ -951,6 +962,8 @@ private fun BookingRequestBottomSheet(
           onValueChange = { preferredTime = it },
           label = { Text("Preferred Time") },
           singleLine = true,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("booking_time_input"),
         )
 

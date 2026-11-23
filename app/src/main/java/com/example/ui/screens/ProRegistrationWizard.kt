@@ -1,9 +1,12 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import android.content.Context
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +36,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +49,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.ImageEncodingHelper
+import java.io.File
 import com.example.model.Coordinates
 import com.example.model.ProviderVerificationDoc
 import com.example.model.ServiceCategories
@@ -89,6 +97,66 @@ fun ProRegistrationWizard(
     if (userCoordinates != null && ((state.lat == 0.0 && state.lng == 0.0) || isLiveBroadcastActive)) {
       state.lat = userCoordinates.latitude
       state.lng = userCoordinates.longitude
+      if (state.currentStep == 2) {
+        state.validationError = null
+      }
+    }
+  }
+
+  LaunchedEffect(userProfile?.email, userProfile?.displayName, userProfile?.phoneNumber) {
+    if (state.email.isBlank() && !userProfile?.email.isNullOrBlank()) {
+      state.email = userProfile!!.email
+    }
+    if (state.fullName.isBlank() && !userProfile?.displayName.isNullOrBlank()) {
+      state.fullName = userProfile!!.displayName
+    }
+    if (state.contactPhone.isBlank() && !userProfile?.phoneNumber.isNullOrBlank()) {
+      state.contactPhone = userProfile!!.phoneNumber
+    }
+  }
+
+  var pendingCaptureUriString by rememberSaveable { mutableStateOf<String?>(null) }
+  var pendingCaptureTargetName by rememberSaveable { mutableStateOf<String?>(null) }
+
+  val cameraCaptureLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
+      val uriString = pendingCaptureUriString
+      val targetName = pendingCaptureTargetName
+      pendingCaptureUriString = null
+      pendingCaptureTargetName = null
+      if (captured && uriString != null && targetName != null) {
+        val uri = Uri.parse(uriString)
+        scope.launch {
+          val encoded = ImageEncodingHelper.encodeUriToCompactDataUrl(context, uri)
+          if (encoded != null) {
+            when (targetName) {
+              CAPTURE_TARGET_PROFILE -> state.profilePhotoData = encoded
+              CAPTURE_TARGET_CNIC_FRONT -> state.cnicPhotoData = encoded
+              CAPTURE_TARGET_CNIC_BACK -> state.cnicBackPhotoData = encoded
+              CAPTURE_TARGET_CERTIFICATE -> state.certificatePhotoData = encoded
+              CAPTURE_TARGET_PORTFOLIO ->
+                if (state.portfolioImages.size < 4) {
+                  state.portfolioImages = state.portfolioImages + encoded
+                }
+            }
+            state.validationError = null
+          } else {
+            state.validationError = "Could not compress captured photo. Please try again."
+          }
+        }
+      }
+    }
+
+  fun launchCameraCapture(target: String) {
+    runCatching {
+      val uri = createWizardCaptureUri(context, target)
+      pendingCaptureUriString = uri.toString()
+      pendingCaptureTargetName = target
+      cameraCaptureLauncher.launch(uri)
+    }.onFailure {
+      pendingCaptureUriString = null
+      pendingCaptureTargetName = null
+      state.validationError = "Camera is unavailable on this device. Please use Upload instead."
     }
   }
 
@@ -104,12 +172,21 @@ fun ProRegistrationWizard(
     }
 
   val portfolioPhotoPicker =
-    rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-      if (uri != null && state.portfolioImages.size < 4) {
+    rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { uris ->
+      if (uris.isNotEmpty() && state.portfolioImages.size < 4) {
         scope.launch {
-          val encoded = ImageEncodingHelper.encodeUriToCompactDataUrl(context, uri)
-          if (encoded != null) state.portfolioImages = state.portfolioImages + encoded
-          else state.validationError = "Could not compress portfolio image."
+          val remainingSlots = (4 - state.portfolioImages.size).coerceAtLeast(0)
+          val newlyEncoded = mutableListOf<String>()
+          uris.take(remainingSlots).forEach { uri ->
+            val encoded = ImageEncodingHelper.encodeUriToCompactDataUrl(context, uri)
+            if (encoded != null) newlyEncoded.add(encoded)
+          }
+          if (newlyEncoded.isNotEmpty()) {
+            state.portfolioImages = (state.portfolioImages + newlyEncoded).take(4)
+            state.validationError = null
+          } else {
+            state.validationError = "Could not compress selected portfolio images."
+          }
         }
       }
     }
@@ -172,8 +249,15 @@ fun ProRegistrationWizard(
         0 ->
           ProWizardStep1Personal(
             state = state,
+            categories = categories,
+            selectedCategory = selectedCategory,
             isPhoneVerified = isPhoneVerified,
             onPickProfilePhoto = { profilePhotoPicker.launch(imageRequest) },
+            onCaptureProfilePhoto = { launchCameraCapture(CAPTURE_TARGET_PROFILE) },
+            onPickCnicFront = { cnicFrontPicker.launch(imageRequest) },
+            onCaptureCnicFront = { launchCameraCapture(CAPTURE_TARGET_CNIC_FRONT) },
+            onPickCnicBack = { cnicBackPicker.launch(imageRequest) },
+            onCaptureCnicBack = { launchCameraCapture(CAPTURE_TARGET_CNIC_BACK) },
             onOpenOtpDialog = {
               onClearPhoneOtpState()
               state.showOtpDialog = true
@@ -184,7 +268,10 @@ fun ProRegistrationWizard(
             state = state,
             categories = categories,
             selectedCategory = selectedCategory,
-            onPickPortfolioPhoto = { portfolioPhotoPicker.launch(imageRequest) },
+            onPickCertificate = { certificatePicker.launch(imageRequest) },
+            onCaptureCertificate = { launchCameraCapture(CAPTURE_TARGET_CERTIFICATE) },
+            onPickPortfolioPhotos = { portfolioPhotoPicker.launch(imageRequest) },
+            onCapturePortfolioPhoto = { launchCameraCapture(CAPTURE_TARGET_PORTFOLIO) },
           )
         2 ->
           ProWizardStep3Location(
@@ -200,8 +287,11 @@ fun ProRegistrationWizard(
             userProfile = userProfile,
             isPhoneVerified = isPhoneVerified,
             onPickCnicFront = { cnicFrontPicker.launch(imageRequest) },
+            onCaptureCnicFront = { launchCameraCapture(CAPTURE_TARGET_CNIC_FRONT) },
             onPickCnicBack = { cnicBackPicker.launch(imageRequest) },
+            onCaptureCnicBack = { launchCameraCapture(CAPTURE_TARGET_CNIC_BACK) },
             onPickCertificate = { certificatePicker.launch(imageRequest) },
+            onCaptureCertificate = { launchCameraCapture(CAPTURE_TARGET_CERTIFICATE) },
           )
       }
 
@@ -369,4 +459,20 @@ private fun WizardProgressHeader(
       }
     }
   }
+}
+
+private const val CAPTURE_TARGET_PROFILE = "profile"
+private const val CAPTURE_TARGET_CNIC_FRONT = "cnic_front"
+private const val CAPTURE_TARGET_CNIC_BACK = "cnic_back"
+private const val CAPTURE_TARGET_CERTIFICATE = "certificate"
+private const val CAPTURE_TARGET_PORTFOLIO = "portfolio"
+
+private fun createWizardCaptureUri(context: Context, target: String): Uri {
+  val capturesDir = File(context.cacheDir, "captures").apply { mkdirs() }
+  val tempFile = File.createTempFile("${target}_", ".jpg", capturesDir)
+  return FileProvider.getUriForFile(
+    context,
+    "${context.packageName}.fileprovider",
+    tempFile,
+  )
 }

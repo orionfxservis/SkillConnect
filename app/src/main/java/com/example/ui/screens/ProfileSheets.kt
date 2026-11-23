@@ -53,6 +53,7 @@ import com.example.model.ServiceCategory
 import com.example.ui.TechnicianWithDistance
 import com.example.ui.theme.EmeraldLive
 import com.example.ui.theme.StarGold
+import com.example.ui.theme.greenThemeTextFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -198,6 +199,8 @@ fun ProfileSettingsSheet(
         onValueChange = { areaInput = it },
         label = { Text("Preferred City / Service Area") },
         singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+        colors = greenThemeTextFieldColors(),
         modifier = Modifier.fillMaxWidth().testTag("guest_area_input"),
       )
       Button(

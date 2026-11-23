@@ -28,10 +28,15 @@ val LightSurface = Color(0xFFFFFFFF)
 val LightSurfaceVariant = Color(0xFFF3F6F9)
 val CategoryTileBg = Color(0xFFF2F9F6)
 val CategoryTileBorder = Color(0xFFDCECE3)
-val LightOutline = Color(0xFFCBD5E1)
-val LightOutlineVariant = Color(0xFFE5E7EB)
+val LightOutline = Color(0xFF6B8F7E)
+val LightOutlineVariant = Color(0xFFD5E2DC)
 val DarkInk = Color(0xFF111827)
 val MutedSlate = Color(0xFF4B5563)
+
+// Login Input Outline Palette (Blue accent reserved for Login fields)
+val AuthLoginBlue = Color(0xFF0088E8)
+val AuthLoginBlueBg = Color(0xFFF3F8FF)
+val AuthLoginBlueHighlight = Color(0xFFE5F2FF)
 
 // Dark Surface Palette
 val DarkBackground = Color(0xFF071310)

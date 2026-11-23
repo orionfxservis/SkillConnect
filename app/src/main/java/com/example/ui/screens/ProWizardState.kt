@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.example.data.EmailAuthService
 import com.example.model.Coordinates
 import com.example.model.ProviderVerificationDoc
 import com.example.model.ServiceCategories
@@ -16,6 +17,8 @@ import com.example.model.ServiceCategory
 import com.example.model.TechnicianProfile
 import com.example.model.TechnicianRegistrationInput
 import com.example.model.UserProfile
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import kotlin.math.roundToLong
 
 val WizardStepTitles =
@@ -27,7 +30,7 @@ val WizardStepTitles =
     "Documents & Submit",
   )
 
-val GenderOptions = listOf("Male", "Female", "Prefer not to say")
+val GenderOptions = listOf("Male", "Female")
 
 val QualificationPresets =
   listOf(
@@ -84,19 +87,30 @@ class ProWizardState(
   var showOtpDialog by mutableStateOf(false)
   var validationError by mutableStateOf<String?>(null)
 
-  // Step 1: Personal Information
+  // Step 1: Personal Information (Section A)
   var fullName by mutableStateOf(existingTech?.fullName ?: userProfile?.displayName ?: "")
   var contactPhone by mutableStateOf(existingTech?.contactPhone ?: userProfile?.phoneNumber ?: "")
   var email by mutableStateOf(
-    existingTech?.email?.ifBlank { userProfile?.email ?: "" } ?: userProfile?.email ?: ""
+    existingTech?.email?.takeIf { it.isNotBlank() }
+      ?: userProfile?.email?.takeIf { it.isNotBlank() }
+      ?: Firebase.auth.currentUser?.email?.takeIf { it.isNotBlank() }
+      ?: EmailAuthService.lastSignUpEmail
+      ?: ""
   )
-  var gender by mutableStateOf(existingTech?.gender ?: "")
+  var gender by mutableStateOf(
+    existingTech?.gender?.takeIf { it in GenderOptions } ?: ""
+  )
   var profilePhotoData by mutableStateOf(existingTech?.profilePhotoData ?: "")
   var cnicNumber by mutableStateOf(existingVerify?.cnicNumber ?: "")
 
-  // Step 2: Professional Details
+  // Category (selectable in Section A dropdown & synced with Step 2)
   var categoryId by mutableStateOf(
-    ServiceCategories.byId(existingTech?.categoryId ?: "electrician", categories).id
+    ServiceCategories.byId(
+      existingTech?.categoryId?.takeIf { it.isNotBlank() }
+        ?: EmailAuthService.lastSignUpCategoryId?.takeIf { it.isNotBlank() }
+        ?: "electrician",
+      categories,
+    ).id
   )
   var additionalCategoryIds by mutableStateOf(existingTech?.additionalCategoryIds ?: emptyList())
   var subcategory by mutableStateOf(existingTech?.subcategory ?: "")
@@ -112,17 +126,17 @@ class ProWizardState(
   var workingArea by mutableStateOf(
     existingTech?.workingArea ?: userProfile?.defaultArea ?: ""
   )
-  var radiusKm by mutableFloatStateOf((existingTech?.serviceRadiusKm ?: 15L).toFloat())
+  var radiusKm by mutableFloatStateOf((existingTech?.serviceRadiusKm ?: 10L).toFloat())
   var preferredAreas by mutableStateOf(existingTech?.preferredAreas ?: emptyList())
   var customAreaInput by mutableStateOf("")
   var travelToCustomer by mutableStateOf(existingTech?.travelToCustomer ?: true)
   var lat by mutableDoubleStateOf(existingTech?.latitude ?: userCoordinates?.latitude ?: 0.0)
   var lng by mutableDoubleStateOf(existingTech?.longitude ?: userCoordinates?.longitude ?: 0.0)
 
-  // Step 4: Charges & Availability
-  var visitCharge by mutableStateOf(existingTech?.visitCharge ?: "")
-  var hourlyCharge by mutableStateOf(existingTech?.hourlyCharge ?: "")
-  var dailyCharge by mutableStateOf(existingTech?.dailyCharge ?: "")
+  // Step 4: Charges & Availability (Section D)
+  var visitCharge by mutableStateOf(editablePkrValue(existingTech?.visitCharge))
+  var hourlyCharge by mutableStateOf(editablePkrValue(existingTech?.hourlyCharge))
+  var dailyCharge by mutableStateOf(editablePkrValue(existingTech?.dailyCharge))
   var serviceChargeNote by mutableStateOf(existingTech?.serviceChargeNote ?: "")
   var workingDays by mutableStateOf(
     existingTech?.workingDays ?: listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
@@ -145,27 +159,36 @@ class ProWizardState(
     when (step) {
       0 ->
         when {
+          categoryId.trim().isEmpty() -> "Please select a service category."
           fullName.trim().length < 2 -> "Enter your full name (at least 2 characters)."
           contactPhone.trim().length < 5 -> "Enter a valid mobile number (e.g. +92300...)."
+          profilePhotoData.isBlank() -> "Please upload or capture your profile photograph."
+          gender !in GenderOptions -> "Please select your gender (Male or Female)."
           else -> null
         }
       1 ->
         when {
-          expertise.trim().length < 2 -> "Select or enter your technical skills & expertise."
+          categoryId.trim().isEmpty() -> "Please select a main category."
+          subcategory.trim().length < 2 -> "Please select or enter a subcategory."
+          professionalTitle.trim().length < 2 -> "Enter your professional title."
+          expertise.trim().length < 2 -> "Select or enter your skills & expertise."
           yearsText.toLongOrNull() == null -> "Enter your years of experience."
+          bio.trim().length < 5 -> "Enter your work description (at least 5 characters)."
           else -> null
         }
       2 ->
         when {
           city.trim().length < 2 -> "Select or enter your current city."
-          workingArea.trim().length < 2 -> "Enter your working area or town."
+          workingArea.trim().length < 2 -> "Enter your area or town (e.g. Gulshan-e-Iqbal)."
+          lat == 0.0 && lng == 0.0 -> "Tap 'Detect Current Location' to pin your GPS coordinates."
+          radiusKm < 1f -> "Select your service coverage radius."
           else -> null
         }
       3 ->
         when {
-          visitCharge.trim().isEmpty() -> "Enter your visiting fee (e.g. Rs. 500 or Free Visit)."
+          visitCharge.trim().isEmpty() -> "Enter your visiting charges in PKR (e.g. 500)."
           workingDays.isEmpty() -> "Select at least one working day."
-          availabilityHours.trim().length < 2 -> "Enter your working hours."
+          availabilityHours.trim().length < 2 -> "Select your working hours."
           else -> null
         }
       4 ->
@@ -205,9 +228,9 @@ class ProWizardState(
       yearsExperience = (yearsText.toLongOrNull() ?: 1L).coerceIn(0L, 70L),
       contactPhone = contactPhone,
       phoneVerified = isPhoneVerified,
-      visitCharge = visitCharge,
-      hourlyCharge = hourlyCharge,
-      dailyCharge = dailyCharge,
+      visitCharge = normalizePkrForSave(visitCharge),
+      hourlyCharge = normalizePkrForSave(hourlyCharge),
+      dailyCharge = normalizePkrForSave(dailyCharge),
       serviceChargeNote = serviceChargeNote,
       workingDays = workingDays,
       availabilityHours = availabilityHours,
@@ -230,6 +253,23 @@ class ProWizardState(
       latitude = finalLat,
       longitude = finalLng,
     )
+  }
+
+  private fun editablePkrValue(stored: String?): String =
+    stored
+      ?.trim()
+      ?.replace(Regex("^(PKR|Rs\\.?)\\s*", RegexOption.IGNORE_CASE), "")
+      ?.trim()
+      .orEmpty()
+
+  private fun normalizePkrForSave(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return ""
+    return if (trimmed.startsWith("PKR", ignoreCase = true) || trimmed.startsWith("Rs", ignoreCase = true)) {
+      trimmed
+    } else {
+      "PKR $trimmed"
+    }
   }
 }
 

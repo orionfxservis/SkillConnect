@@ -49,7 +49,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,6 +82,7 @@ import com.example.ui.theme.EmeraldLive
 import com.example.ui.theme.LightBackground
 import com.example.ui.theme.OnEmeraldContainer
 import com.example.ui.theme.StarGold
+import com.example.ui.theme.greenThemeTextFieldColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -235,13 +235,7 @@ fun CategoryCandidatesScreen(
             },
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
-            colors =
-              OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color(0xFFF8FAFC),
-                unfocusedContainerColor = Color(0xFFF8FAFC),
-                focusedBorderColor = DeepTeal,
-                unfocusedBorderColor = Color(0xFFE2E8F0),
-              ),
+            colors = greenThemeTextFieldColors(),
             modifier = Modifier.fillMaxWidth().testTag("category_search_input"),
           )
 

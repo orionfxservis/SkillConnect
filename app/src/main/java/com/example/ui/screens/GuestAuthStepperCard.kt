@@ -34,7 +34,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,18 +63,23 @@ import com.example.data.EmailAuthService
 import com.example.data.VerificationSendResult
 import com.example.model.ServiceCategories
 import com.example.model.ServiceCategory
+import com.example.ui.theme.EmeraldContainer
+import com.example.ui.theme.OnEmeraldContainer
+import com.example.ui.theme.blueLoginTextFieldColors
+import com.example.ui.theme.greenThemeTextFieldColors
 import kotlinx.coroutines.launch
 
 @Composable
 fun GuestAuthStepperCard(
   categories: List<ServiceCategory> = ServiceCategories.defaults,
 ) {
-  val authBlue = Color(0xFF0088E8)
-  val pillTrackColor = Color(0xFFF1F5F9)
-  val inactiveCircleBg = Color(0xFFE2E8F0)
-  val inactiveText = Color(0xFF334155)
-  val inputBg = Color(0xFFF8FAFC)
-  val inputBorder = Color(0xFFE2E8F0)
+  val themeGreen = MaterialTheme.colorScheme.primary
+  val pillTrackColor = MaterialTheme.colorScheme.surfaceVariant
+  val inactiveCircleBg = MaterialTheme.colorScheme.outlineVariant
+  val inactiveText = MaterialTheme.colorScheme.onSurfaceVariant
+  val fieldLabelColor = MaterialTheme.colorScheme.onSurface
+  val greenFieldColors = greenThemeTextFieldColors()
+  val blueLoginColors = blueLoginTextFieldColors()
 
   val scope = rememberCoroutineScope()
   val allCategories = remember(categories) { categories.ifEmpty { ServiceCategories.defaults } }
@@ -146,8 +150,8 @@ fun GuestAuthStepperCard(
 
   Card(
     shape = RoundedCornerShape(22.dp),
-    colors = CardDefaults.cardColors(containerColor = Color.White),
-    border = BorderStroke(1.dp, inputBorder),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     modifier = Modifier.fillMaxWidth().testTag("guest_auth_stepper_card"),
   ) {
     Column(
@@ -170,7 +174,7 @@ fun GuestAuthStepperCard(
               resetMessages()
             },
             shape = RoundedCornerShape(11.dp),
-            color = if (!isSignUpMode) Color.White else Color.Transparent,
+            color = if (!isSignUpMode) MaterialTheme.colorScheme.surface else Color.Transparent,
             shadowElevation = if (!isSignUpMode) 2.dp else 0.dp,
             modifier = Modifier.weight(1f).height(40.dp).testTag("auth_tab_login"),
           ) {
@@ -179,7 +183,7 @@ fun GuestAuthStepperCard(
                 text = "Login",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (!isSignUpMode) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (!isSignUpMode) authBlue else inactiveText,
+                color = if (!isSignUpMode) themeGreen else inactiveText,
               )
             }
           }
@@ -190,7 +194,7 @@ fun GuestAuthStepperCard(
               resetMessages()
             },
             shape = RoundedCornerShape(11.dp),
-            color = if (isSignUpMode) Color.White else Color.Transparent,
+            color = if (isSignUpMode) MaterialTheme.colorScheme.surface else Color.Transparent,
             shadowElevation = if (isSignUpMode) 2.dp else 0.dp,
             modifier = Modifier.weight(1f).height(40.dp).testTag("auth_tab_signup"),
           ) {
@@ -199,7 +203,7 @@ fun GuestAuthStepperCard(
                 text = "Sign Up",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (isSignUpMode) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (isSignUpMode) authBlue else inactiveText,
+                color = if (isSignUpMode) themeGreen else inactiveText,
               )
             }
           }
@@ -217,7 +221,7 @@ fun GuestAuthStepperCard(
             label = "Role",
             active = activeStep == 0,
             completed = activeStep > 0,
-            accentColor = authBlue,
+            accentColor = themeGreen,
             inactiveBg = inactiveCircleBg,
             inactiveText = inactiveText,
             onClick = {
@@ -226,7 +230,7 @@ fun GuestAuthStepperCard(
             },
           )
           HorizontalDivider(
-            color = inputBorder,
+            color = MaterialTheme.colorScheme.outlineVariant,
             thickness = 1.dp,
             modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
           )
@@ -235,7 +239,7 @@ fun GuestAuthStepperCard(
             label = "Verify",
             active = activeStep == 1,
             completed = activeStep > 1 || codeVerified,
-            accentColor = authBlue,
+            accentColor = themeGreen,
             inactiveBg = inactiveCircleBg,
             inactiveText = inactiveText,
             onClick = {
@@ -246,7 +250,7 @@ fun GuestAuthStepperCard(
             },
           )
           HorizontalDivider(
-            color = inputBorder,
+            color = MaterialTheme.colorScheme.outlineVariant,
             thickness = 1.dp,
             modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
           )
@@ -255,7 +259,7 @@ fun GuestAuthStepperCard(
             label = "Password",
             active = activeStep == 2,
             completed = false,
-            accentColor = authBlue,
+            accentColor = themeGreen,
             inactiveBg = inactiveCircleBg,
             inactiveText = inactiveText,
             onClick = {
@@ -280,7 +284,7 @@ fun GuestAuthStepperCard(
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.8.sp,
-                color = Color(0xFF1E293B),
+                color = fieldLabelColor,
               )
               OutlinedTextField(
                 value = emailInput,
@@ -288,17 +292,11 @@ fun GuestAuthStepperCard(
                   emailInput = it
                   resetMessages()
                 },
-                placeholder = { Text("you@gmail.com (Gmail preferred)", color = Color(0xFF94A3B8)) },
+                placeholder = { Text("you@gmail.com (Gmail preferred)") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 shape = RoundedCornerShape(14.dp),
-                colors =
-                  OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = inputBg,
-                    unfocusedContainerColor = inputBg,
-                    focusedBorderColor = authBlue,
-                    unfocusedBorderColor = inputBorder,
-                  ),
+                colors = greenFieldColors,
                 modifier = Modifier.fillMaxWidth().testTag("auth_work_email_input"),
               )
 
@@ -307,7 +305,7 @@ fun GuestAuthStepperCard(
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.8.sp,
-                color = Color(0xFF1E293B),
+                color = fieldLabelColor,
               )
 
               LazyRow(
@@ -320,8 +318,8 @@ fun GuestAuthStepperCard(
                   AuthRoleCategoryCard(
                     category = category,
                     selected = selected,
-                    accentBlue = authBlue,
-                    defaultBorder = inputBorder,
+                    accentColor = themeGreen,
+                    defaultBorder = MaterialTheme.colorScheme.outlineVariant,
                     onClick = {
                       selectedCategoryId = category.id
                       resetMessages()
@@ -336,8 +334,8 @@ fun GuestAuthStepperCard(
                 shape = RoundedCornerShape(14.dp),
                 colors =
                   ButtonDefaults.buttonColors(
-                    containerColor = authBlue,
-                    contentColor = Color.White,
+                    containerColor = themeGreen,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                   ),
                 modifier =
                   Modifier.fillMaxWidth().height(48.dp).testTag("send_verification_code_button"),
@@ -345,7 +343,7 @@ fun GuestAuthStepperCard(
                 if (isSubmitting) {
                   CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     strokeWidth = 2.2.dp,
                   )
                 } else {
@@ -373,12 +371,12 @@ fun GuestAuthStepperCard(
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.8.sp,
-                    color = Color(0xFF1E293B),
+                    color = fieldLabelColor,
                   )
                   Text(
                     text = "${emailInput.trim()} • ${selectedCategory.name}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF64748B),
+                    color = inactiveText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                   )
@@ -389,7 +387,7 @@ fun GuestAuthStepperCard(
                     resetMessages()
                   }
                 ) {
-                  Text("Change", color = authBlue)
+                  Text("Change", color = themeGreen)
                 }
               }
 
@@ -400,17 +398,11 @@ fun GuestAuthStepperCard(
                   verificationCodeInput = digits
                   resetMessages()
                 },
-                placeholder = { Text("6-digit code", color = Color(0xFF94A3B8)) },
+                placeholder = { Text("6-digit code") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = RoundedCornerShape(14.dp),
-                colors =
-                  OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = inputBg,
-                    unfocusedContainerColor = inputBg,
-                    focusedBorderColor = authBlue,
-                    unfocusedBorderColor = inputBorder,
-                  ),
+                colors = greenFieldColors,
                 modifier = Modifier.fillMaxWidth().testTag("auth_verification_code_input"),
               )
 
@@ -446,8 +438,8 @@ fun GuestAuthStepperCard(
                 shape = RoundedCornerShape(14.dp),
                 colors =
                   ButtonDefaults.buttonColors(
-                    containerColor = authBlue,
-                    contentColor = Color.White,
+                    containerColor = themeGreen,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                   ),
                 modifier =
                   Modifier.fillMaxWidth().height(50.dp).testTag("verify_code_continue_button"),
@@ -460,7 +452,7 @@ fun GuestAuthStepperCard(
                 enabled = !isSubmitting,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
               ) {
-                Text("Resend Verification Code", color = authBlue)
+                Text("Resend Verification Code", color = themeGreen)
               }
             }
           }
@@ -473,12 +465,12 @@ fun GuestAuthStepperCard(
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.8.sp,
-                color = Color(0xFF1E293B),
+                color = fieldLabelColor,
               )
               Text(
                 text = "Verified: ${emailInput.trim()} (${selectedCategory.name})",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF065F46),
+                color = OnEmeraldContainer,
                 fontWeight = FontWeight.Medium,
               )
 
@@ -488,7 +480,7 @@ fun GuestAuthStepperCard(
                   passwordInput = it
                   resetMessages()
                 },
-                placeholder = { Text("Minimum 6 characters", color = Color(0xFF94A3B8)) },
+                placeholder = { Text("Minimum 6 characters") },
                 singleLine = true,
                 visualTransformation =
                   if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -503,13 +495,7 @@ fun GuestAuthStepperCard(
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 shape = RoundedCornerShape(14.dp),
-                colors =
-                  OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = inputBg,
-                    unfocusedContainerColor = inputBg,
-                    focusedBorderColor = authBlue,
-                    unfocusedBorderColor = inputBorder,
-                  ),
+                colors = greenFieldColors,
                 modifier = Modifier.fillMaxWidth().testTag("auth_signup_password_input"),
               )
 
@@ -519,19 +505,13 @@ fun GuestAuthStepperCard(
                   confirmPasswordInput = it
                   resetMessages()
                 },
-                placeholder = { Text("Confirm password", color = Color(0xFF94A3B8)) },
+                placeholder = { Text("Confirm password") },
                 singleLine = true,
                 visualTransformation =
                   if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 shape = RoundedCornerShape(14.dp),
-                colors =
-                  OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = inputBg,
-                    unfocusedContainerColor = inputBg,
-                    focusedBorderColor = authBlue,
-                    unfocusedBorderColor = inputBorder,
-                  ),
+                colors = greenFieldColors,
                 modifier = Modifier.fillMaxWidth().testTag("auth_signup_confirm_password_input"),
               )
 
@@ -556,6 +536,7 @@ fun GuestAuthStepperCard(
                           email = emailInput,
                           password = passwordInput,
                           categoryName = selectedCategory.name,
+                          categoryId = selectedCategory.id,
                         )
                     ) {
                       is EmailAuthResult.Success -> {
@@ -574,8 +555,8 @@ fun GuestAuthStepperCard(
                 shape = RoundedCornerShape(14.dp),
                 colors =
                   ButtonDefaults.buttonColors(
-                    containerColor = authBlue,
-                    contentColor = Color.White,
+                    containerColor = themeGreen,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                   ),
                 modifier =
                   Modifier.fillMaxWidth().height(50.dp).testTag("create_account_submit_button"),
@@ -583,7 +564,7 @@ fun GuestAuthStepperCard(
                 if (isSubmitting) {
                   CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     strokeWidth = 2.2.dp,
                   )
                 } else {
@@ -594,7 +575,7 @@ fun GuestAuthStepperCard(
           }
         }
       } else {
-        // LOGIN TAB
+        // LOGIN TAB (Blue outline input fields per user preference + green default theme button)
         if (statusMessage != null) {
           AuthStatusBanner(message = statusMessage!!, isError = isErrorBanner)
         }
@@ -605,7 +586,7 @@ fun GuestAuthStepperCard(
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.8.sp,
-            color = Color(0xFF1E293B),
+            color = fieldLabelColor,
           )
           OutlinedTextField(
             value = emailInput,
@@ -613,17 +594,11 @@ fun GuestAuthStepperCard(
               emailInput = it
               resetMessages()
             },
-            placeholder = { Text("you@gmail.com", color = Color(0xFF94A3B8)) },
+            placeholder = { Text("you@gmail.com") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             shape = RoundedCornerShape(14.dp),
-            colors =
-              OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = inputBg,
-                unfocusedContainerColor = inputBg,
-                focusedBorderColor = authBlue,
-                unfocusedBorderColor = inputBorder,
-              ),
+            colors = blueLoginColors,
             modifier = Modifier.fillMaxWidth().testTag("auth_login_email_input"),
           )
 
@@ -632,7 +607,7 @@ fun GuestAuthStepperCard(
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.8.sp,
-            color = Color(0xFF1E293B),
+            color = fieldLabelColor,
           )
           OutlinedTextField(
             value = passwordInput,
@@ -640,7 +615,7 @@ fun GuestAuthStepperCard(
               passwordInput = it
               resetMessages()
             },
-            placeholder = { Text("Enter password", color = Color(0xFF94A3B8)) },
+            placeholder = { Text("Enter password") },
             singleLine = true,
             visualTransformation =
               if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -655,13 +630,7 @@ fun GuestAuthStepperCard(
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             shape = RoundedCornerShape(14.dp),
-            colors =
-              OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = inputBg,
-                unfocusedContainerColor = inputBg,
-                focusedBorderColor = authBlue,
-                unfocusedBorderColor = inputBorder,
-              ),
+            colors = blueLoginColors,
             modifier = Modifier.fillMaxWidth().testTag("auth_login_password_input"),
           )
 
@@ -686,13 +655,16 @@ fun GuestAuthStepperCard(
             enabled = !isSubmitting,
             shape = RoundedCornerShape(14.dp),
             colors =
-              ButtonDefaults.buttonColors(containerColor = authBlue, contentColor = Color.White),
+              ButtonDefaults.buttonColors(
+                containerColor = themeGreen,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+              ),
             modifier = Modifier.fillMaxWidth().height(50.dp).testTag("auth_login_submit_button"),
           ) {
             if (isSubmitting) {
               CircularProgressIndicator(
                 modifier = Modifier.size(20.dp),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onPrimary,
                 strokeWidth = 2.2.dp,
               )
             } else {
@@ -709,7 +681,7 @@ fun GuestAuthStepperCard(
 private fun AuthRoleCategoryCard(
   category: ServiceCategory,
   selected: Boolean,
-  accentBlue: Color,
+  accentColor: Color,
   defaultBorder: Color,
   onClick: () -> Unit,
 ) {
@@ -720,11 +692,11 @@ private fun AuthRoleCategoryCard(
   Surface(
     onClick = onClick,
     shape = RoundedCornerShape(14.dp),
-    color = if (selected) accentBlue.copy(alpha = 0.05f) else Color.White,
+    color = if (selected) EmeraldContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surface,
     border =
       BorderStroke(
         width = if (selected) 2.dp else 1.dp,
-        color = if (selected) accentBlue else defaultBorder,
+        color = if (selected) accentColor else defaultBorder,
       ),
     modifier = Modifier.width(106.dp).height(78.dp).testTag("auth_category_${category.id}"),
   ) {
@@ -736,7 +708,7 @@ private fun AuthRoleCategoryCard(
       Icon(
         imageVector = category.icon,
         contentDescription = category.name,
-        tint = if (selected) accentBlue else category.tint,
+        tint = if (selected) accentColor else category.tint,
         modifier = Modifier.size(24.dp),
       )
       Spacer(modifier = Modifier.height(4.dp))
@@ -744,7 +716,7 @@ private fun AuthRoleCategoryCard(
         text = category.name,
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
-        color = if (selected) accentBlue else Color(0xFF0F172A),
+        color = if (selected) accentColor else MaterialTheme.colorScheme.onSurface,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
@@ -753,7 +725,7 @@ private fun AuthRoleCategoryCard(
         text = shortSub,
         fontSize = 10.sp,
         lineHeight = 12.sp,
-        color = if (selected) accentBlue.copy(alpha = 0.85f) else Color(0xFF64748B),
+        color = if (selected) accentColor.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
@@ -769,14 +741,19 @@ private fun AuthStatusBanner(
 ) {
   Surface(
     shape = RoundedCornerShape(12.dp),
-    color = if (isError) Color(0xFFFEF2F2) else Color(0xFFECFDF5),
-    border = BorderStroke(1.dp, if (isError) Color(0xFFFECACA) else Color(0xFFA7F3D0)),
+    color = if (isError) MaterialTheme.colorScheme.errorContainer else EmeraldContainer,
+    border =
+      BorderStroke(
+        1.dp,
+        if (isError) MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+        else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+      ),
     modifier = Modifier.fillMaxWidth(),
   ) {
     Text(
       text = message,
       style = MaterialTheme.typography.bodySmall,
-      color = if (isError) Color(0xFF991B1B) else Color(0xFF065F46),
+      color = if (isError) MaterialTheme.colorScheme.onErrorContainer else OnEmeraldContainer,
       modifier = Modifier.padding(12.dp),
     )
   }
@@ -816,7 +793,7 @@ private fun AuthStepBadge(
           Icon(
             imageVector = Icons.Rounded.Check,
             contentDescription = null,
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(14.dp),
           )
         } else {
@@ -824,7 +801,7 @@ private fun AuthStepBadge(
             text = stepNumber.toString(),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
-            color = if (active) Color.White else inactiveText,
+            color = if (active) MaterialTheme.colorScheme.onPrimary else inactiveText,
           )
         }
       }
@@ -833,7 +810,9 @@ private fun AuthStepBadge(
       text = label,
       style = MaterialTheme.typography.labelLarge,
       fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-      color = if (active) Color(0xFF0F172A) else Color(0xFF475569),
+      color =
+        if (active) MaterialTheme.colorScheme.onSurface
+        else MaterialTheme.colorScheme.onSurfaceVariant,
       maxLines = 1,
       softWrap = false,
     )

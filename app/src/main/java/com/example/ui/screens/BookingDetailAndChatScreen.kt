@@ -82,6 +82,7 @@ import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.EmeraldLive
 import com.example.ui.theme.OnEmeraldContainer
 import com.example.ui.theme.StarGold
+import com.example.ui.theme.greenThemeTextFieldColors
 import kotlin.math.cos
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -235,6 +236,7 @@ fun BookingDetailAndChatScreen(
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
+                    colors = greenThemeTextFieldColors(),
                     modifier = Modifier.weight(1f).testTag("chat_message_input"),
                   )
                   Spacer(modifier = Modifier.width(8.dp))
@@ -788,6 +790,8 @@ private fun ReviewDialog(
           label = { Text("Share your experience") },
           minLines = 2,
           maxLines = 4,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("review_comment_input"),
         )
         if (errorText != null) {
@@ -860,6 +864,8 @@ private fun ReportIssueDialog(
           label = { Text("Describe what happened") },
           minLines = 2,
           maxLines = 4,
+          shape = RoundedCornerShape(12.dp),
+          colors = greenThemeTextFieldColors(),
           modifier = Modifier.fillMaxWidth().testTag("complaint_description_input"),
         )
         if (errorText != null) {

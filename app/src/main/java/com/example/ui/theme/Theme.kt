@@ -2,7 +2,9 @@ package com.example.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -87,3 +89,47 @@ fun FixNearTheme(
     content = content,
   )
 }
+
+@Composable
+fun greenThemeTextFieldColors(highlighted: Boolean = false): TextFieldColors {
+  val primary = MaterialTheme.colorScheme.primary
+  val highlightBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
+  val restingBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.16f)
+  return OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = highlightBg,
+    unfocusedContainerColor = if (highlighted) highlightBg else restingBg,
+    focusedBorderColor = primary,
+    unfocusedBorderColor = if (highlighted) primary else primary.copy(alpha = 0.62f),
+    focusedLabelColor = primary,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedLeadingIconColor = primary,
+    unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedTrailingIconColor = primary,
+    unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    cursorColor = primary,
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+  )
+}
+
+@Composable
+fun blueLoginTextFieldColors(): TextFieldColors =
+  OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = AuthLoginBlueHighlight,
+    unfocusedContainerColor = AuthLoginBlueBg,
+    focusedBorderColor = AuthLoginBlue,
+    unfocusedBorderColor = AuthLoginBlue.copy(alpha = 0.65f),
+    focusedLabelColor = AuthLoginBlue,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedLeadingIconColor = AuthLoginBlue,
+    unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedTrailingIconColor = AuthLoginBlue,
+    unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    cursorColor = AuthLoginBlue,
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+  )

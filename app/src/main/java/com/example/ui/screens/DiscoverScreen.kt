@@ -118,6 +118,7 @@ import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.EmeraldLive
 import com.example.ui.theme.LightBackground
 import com.example.ui.theme.OnEmeraldContainer
+import com.example.ui.theme.greenThemeTextFieldColors
 import com.example.ui.theme.StarGold
 import kotlinx.coroutines.launch
 
@@ -194,36 +195,115 @@ fun DiscoverScreen(
       prioritized + remaining
     }
 
-  val categoryColumns = remember(orderedCategories) { orderedCategories.chunked(3) }
   val categoryRowState = rememberLazyListState()
   val pagerState = rememberPagerState(pageCount = { 3 })
 
   Box(modifier = modifier.fillMaxSize().background(LightBackground)) {
-    LazyColumn(
+    Column(
       modifier = Modifier.fillMaxSize().widthIn(max = 760.dp).align(Alignment.TopCenter),
-      contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-      // Curved Emerald-Teal Top Header (bleeds edge-to-edge under status bar)
-      item {
-        CurvedBrandHeader(
-          areaLabel =
-            userProfile?.defaultArea?.takeIf { it.isNotBlank() }
-              ?: guestArea.ifBlank {
-                if (userCoordinates != null) "Current GPS Area" else "Karachi, Sindh"
-              },
-          hasGps = userCoordinates != null,
-          notificationCount = activeBookings.size,
-          searchQuery = searchQuery,
-          onSearchQueryChange = onSearchQueryChange,
-          onOpenLocationPicker = { showLocationDialog = true },
-          onRequestLocation = onRequestLocation,
-          onOpenNotifications = { showNotificationsSheet = true },
-        )
-      }
+      // Fixed Curved Emerald-Teal Top Header (bleeds edge-to-edge under status bar)
+      CurvedBrandHeader(
+        areaLabel =
+          userProfile?.defaultArea?.takeIf { it.isNotBlank() }
+            ?: guestArea.ifBlank {
+              if (userCoordinates != null) "Current GPS Area" else "Karachi, Sindh"
+            },
+        hasGps = userCoordinates != null,
+        notificationCount = activeBookings.size,
+        searchQuery = searchQuery,
+        onSearchQueryChange = onSearchQueryChange,
+        onOpenLocationPicker = { showLocationDialog = true },
+        onRequestLocation = onRequestLocation,
+        onOpenNotifications = { showNotificationsSheet = true },
+      )
 
-      // Hero Banner Carousel + Dot Indicators
-      item {
-        Column(modifier = Modifier.padding(top = 10.dp)) {
+      if (searchQuery.isNotBlank()) {
+        // Scrollable Search Results when actively searching
+        LazyColumn(
+          modifier = Modifier.fillMaxWidth().weight(1f),
+          contentPadding = PaddingValues(bottom = 20.dp),
+        ) {
+          item {
+            Row(
+              modifier =
+                Modifier.fillMaxWidth()
+                  .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = "Matching Professionals",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+              )
+              TextButton(onClick = { onSearchQueryChange("") }) {
+                Text("Clear", color = DeepTeal)
+              }
+            }
+          }
+
+          when (techniciansState) {
+            is UiState.Loading -> {
+              item {
+                Box(
+                  modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                  contentAlignment = Alignment.Center,
+                ) {
+                  CircularProgressIndicator()
+                }
+              }
+            }
+            is UiState.Error -> {
+              item {
+                ErrorCard(
+                  message = techniciansState.message,
+                  modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+              }
+            }
+            is UiState.Success -> {
+              val list = techniciansState.data
+              if (list.isEmpty()) {
+                item {
+                  EmptyDirectoryCard(
+                    hasFilters = true,
+                    onResetFilters = {
+                      onSelectCategory(null)
+                      if (availableOnly) onToggleAvailableOnly()
+                      if (verifiedOnly) onToggleVerifiedOnly()
+                      onSearchQueryChange("")
+                    },
+                    onOpenProHub = onOpenProHub,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                  )
+                }
+              } else {
+                items(list, key = { it.technician.userId }) { item ->
+                  TechnicianDirectoryCard(
+                    entry = item,
+                    categories = categories,
+                    onCallClick = {
+                      runCatching {
+                        val dialIntent =
+                          Intent(Intent.ACTION_DIAL).apply {
+                            data = Uri.parse("tel:${item.technician.contactPhone}")
+                          }
+                        context.startActivity(dialIntent)
+                      }
+                    },
+                    onBookClick = { onOpenTechnician(item.technician.userId) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                  )
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Fixed Hero Banner Carousel + Dot Indicators (no vertical scroll on Home)
+        Column(modifier = Modifier.padding(top = 8.dp)) {
           HorizontalPager(
             state = pagerState,
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -262,7 +342,7 @@ fun DiscoverScreen(
             }
           }
 
-          Spacer(modifier = Modifier.height(10.dp))
+          Spacer(modifier = Modifier.height(6.dp))
 
           // Carousel Page Indicator Dots
           Row(
@@ -287,11 +367,11 @@ fun DiscoverScreen(
             }
           }
         }
-      }
 
-      // Popular Categories (Horizontal Scrolling 3-Row Carousel with Left & Right Arrows)
-      item {
-        Column(modifier = Modifier.padding(vertical = 14.dp)) {
+        // Fixed Popular Categories Header + Left/Right Horizontally Scrolling Category Cards
+        Column(
+          modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 6.dp),
+        ) {
           Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -305,7 +385,7 @@ fun DiscoverScreen(
             )
 
             Row(
-              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              horizontalArrangement = Arrangement.spacedBy(2.dp),
               verticalAlignment = Alignment.CenterVertically,
             ) {
               val canScrollLeft = categoryRowState.canScrollBackward
@@ -319,7 +399,7 @@ fun DiscoverScreen(
                   }
                 },
                 enabled = canScrollLeft,
-                modifier = Modifier.size(42.dp).testTag("categories_scroll_left"),
+                modifier = Modifier.size(48.dp).testTag("categories_scroll_left"),
               ) {
                 Surface(
                   shape = CircleShape,
@@ -345,14 +425,15 @@ fun DiscoverScreen(
               IconButton(
                 onClick = {
                   scope.launch {
-                    val lastIndex = (categoryColumns.size - 1).coerceAtLeast(0)
+                    val totalCols = categoryRowState.layoutInfo.totalItemsCount
+                    val lastIndex = (totalCols - 1).coerceAtLeast(0)
                     val target =
                       (categoryRowState.firstVisibleItemIndex + 2).coerceAtMost(lastIndex)
                     categoryRowState.animateScrollToItem(target)
                   }
                 },
                 enabled = canScrollRight,
-                modifier = Modifier.size(42.dp).testTag("categories_scroll_right"),
+                modifier = Modifier.size(48.dp).testTag("categories_scroll_right"),
               ) {
                 Surface(
                   shape = CircleShape,
@@ -377,114 +458,46 @@ fun DiscoverScreen(
             }
           }
 
-          Spacer(modifier = Modifier.height(10.dp))
+          Spacer(modifier = Modifier.height(4.dp))
 
-          BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+          BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            val rowSpacing = 8.dp
+            val rowsPerColumn = if (maxHeight >= 232.dp) 3 else 2
+            val tileHeight =
+              remember(maxHeight, rowsPerColumn) {
+                val totalGaps = rowSpacing * (rowsPerColumn - 1) + 6.dp
+                ((maxHeight - totalGaps) / rowsPerColumn).coerceIn(72.dp, 90.dp)
+              }
             val tileWidth =
               remember(maxWidth) { ((maxWidth - 32.dp - 30.dp) / 4f).coerceIn(74.dp, 108.dp) }
+            val adaptiveColumns =
+              remember(orderedCategories, rowsPerColumn) {
+                orderedCategories.chunked(rowsPerColumn)
+              }
 
             LazyRow(
               state = categoryRowState,
               contentPadding = PaddingValues(horizontal = 16.dp),
               horizontalArrangement = Arrangement.spacedBy(10.dp),
-              modifier = Modifier.fillMaxWidth().testTag("popular_categories_carousel"),
+              modifier = Modifier.fillMaxSize().testTag("popular_categories_carousel"),
             ) {
               items(
-                items = categoryColumns,
+                items = adaptiveColumns,
                 key = { col -> col.firstOrNull()?.id ?: "" },
               ) { colCategories ->
                 Column(
                   modifier = Modifier.width(tileWidth),
-                  verticalArrangement = Arrangement.spacedBy(10.dp),
+                  verticalArrangement = Arrangement.spacedBy(rowSpacing),
                 ) {
                   colCategories.forEach { cat ->
                     CategoryTile(
                       category = cat,
                       selected = selectedCategoryId == cat.id,
                       onClick = { onOpenCategory(cat.id) },
-                      modifier = Modifier.fillMaxWidth(),
+                      modifier = Modifier.fillMaxWidth().height(tileHeight),
                     )
                   }
                 }
-              }
-            }
-          }
-        }
-      }
-
-      // Show matching professionals only when actively searching from the Home search bar
-      if (searchQuery.isNotBlank()) {
-        item {
-          Row(
-            modifier =
-              Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(
-              text = "Matching Professionals",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onBackground,
-            )
-            TextButton(onClick = { onSearchQueryChange("") }) {
-              Text("Clear", color = DeepTeal)
-            }
-          }
-        }
-
-        when (techniciansState) {
-          is UiState.Loading -> {
-            item {
-              Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                contentAlignment = Alignment.Center,
-              ) {
-                CircularProgressIndicator()
-              }
-            }
-          }
-          is UiState.Error -> {
-            item {
-              ErrorCard(
-                message = techniciansState.message,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-              )
-            }
-          }
-          is UiState.Success -> {
-            val list = techniciansState.data
-            if (list.isEmpty()) {
-              item {
-                EmptyDirectoryCard(
-                  hasFilters = true,
-                  onResetFilters = {
-                    onSelectCategory(null)
-                    if (availableOnly) onToggleAvailableOnly()
-                    if (verifiedOnly) onToggleVerifiedOnly()
-                    onSearchQueryChange("")
-                  },
-                  onOpenProHub = onOpenProHub,
-                  modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-              }
-            } else {
-              items(list, key = { it.technician.userId }) { item ->
-                TechnicianDirectoryCard(
-                  entry = item,
-                  categories = categories,
-                  onCallClick = {
-                    runCatching {
-                      val dialIntent =
-                        Intent(Intent.ACTION_DIAL).apply {
-                          data = Uri.parse("tel:${item.technician.contactPhone}")
-                        }
-                      context.startActivity(dialIntent)
-                    }
-                  },
-                  onBookClick = { onOpenTechnician(item.technician.userId) },
-                  modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
               }
             }
           }
@@ -515,6 +528,8 @@ fun DiscoverScreen(
             onValueChange = { areaDraft = it },
             label = { Text("City / Area (e.g. Clifton, Karachi)") },
             singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = greenThemeTextFieldColors(),
             modifier = Modifier.fillMaxWidth().testTag("location_area_input"),
           )
           OutlinedButton(
@@ -664,8 +679,8 @@ private fun CurvedBrandHeader(
       modifier =
         Modifier.fillMaxWidth()
           .statusBarsPadding()
-          .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 26.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+          .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 20.dp),
+      verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
       // Brand Row + Notification Bell
       Row(
@@ -792,7 +807,7 @@ private fun CurvedBrandHeader(
         shape = RoundedCornerShape(50),
         color = Color.White,
         shadowElevation = 2.dp,
-        modifier = Modifier.fillMaxWidth().height(48.dp),
+        modifier = Modifier.fillMaxWidth().height(44.dp),
       ) {
         Row(
           modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -918,7 +933,7 @@ private fun HeroPromoSlide(
   Card(
     shape = RoundedCornerShape(18.dp),
     elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-    modifier = Modifier.fillMaxWidth().height(176.dp),
+    modifier = Modifier.fillMaxWidth().height(148.dp),
   ) {
     Box(
       modifier =
@@ -972,29 +987,29 @@ private fun HeroPromoSlide(
         alignment = Alignment.TopCenter,
         modifier =
           Modifier.fillMaxHeight()
-            .width(172.dp)
+            .width(158.dp)
             .align(Alignment.CenterEnd)
             .clip(rightArcShape),
       )
 
       Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 16.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.SpaceBetween,
       ) {
         Column(modifier = Modifier.fillMaxWidth(0.58f)) {
           Text(
             text = title,
-            fontSize = 20.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White,
-            lineHeight = 24.sp,
+            lineHeight = 21.sp,
           )
-          Spacer(modifier = Modifier.height(6.dp))
+          Spacer(modifier = Modifier.height(4.dp))
           Text(
             text = subtitle,
-            fontSize = 12.sp,
+            fontSize = 11.5.sp,
             color = Color.White.copy(alpha = 0.92f),
-            lineHeight = 16.sp,
+            lineHeight = 15.sp,
           )
         }
 
@@ -1006,8 +1021,8 @@ private fun HeroPromoSlide(
               containerColor = Color(0xFF27B75E),
               contentColor = Color.White,
             ),
-          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-          modifier = Modifier.height(36.dp).testTag("hero_cta_button"),
+          contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+          modifier = Modifier.height(34.dp).testTag("hero_cta_button"),
         ) {
           Text(
             text = ctaLabel,
@@ -1044,13 +1059,12 @@ private fun CategoryTile(
     shadowElevation = 1.dp,
     modifier =
       modifier
-        .height(92.dp)
         .clip(RoundedCornerShape(14.dp))
         .clickable(onClick = onClick)
         .testTag("category_chip_${category.id}"),
   ) {
     Column(
-      modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 8.dp),
+      modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 5.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center,
     ) {
@@ -1058,13 +1072,13 @@ private fun CategoryTile(
         imageVector = category.icon,
         contentDescription = category.name,
         tint = category.tint,
-        modifier = Modifier.size(34.dp),
+        modifier = Modifier.size(30.dp),
       )
-      Spacer(modifier = Modifier.height(6.dp))
+      Spacer(modifier = Modifier.height(4.dp))
       Text(
         text = category.name,
-        fontSize = 10.5.sp,
-        lineHeight = 12.sp,
+        fontSize = 10.sp,
+        lineHeight = 11.5.sp,
         letterSpacing = (-0.2).sp,
         fontWeight = FontWeight.Medium,
         color = Color(0xFF1E293B),
