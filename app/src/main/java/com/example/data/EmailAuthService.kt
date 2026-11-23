@@ -18,6 +18,8 @@ import org.json.JSONObject
 sealed interface VerificationSendResult {
   data class Sent(val issuedCode: String, val expiresAtMillis: Long) : VerificationSendResult
 
+  data class UseFirebaseEmailLink(val message: String) : VerificationSendResult
+
   data class NeedsConfiguration(val message: String) : VerificationSendResult
 
   data class Failed(val message: String) : VerificationSendResult
@@ -67,8 +69,8 @@ object EmailAuthService {
     }
 
     if (!hasConfiguredResendKey()) {
-      return@withContext VerificationSendResult.NeedsConfiguration(
-        "Live email code delivery is not configured yet. Add RESEND_API_KEY in AI Studio Secrets to mail verification codes to Gmail."
+      return@withContext VerificationSendResult.UseFirebaseEmailLink(
+        "Create your password below — Firebase will send a verification link directly to $cleanEmail."
       )
     }
 
@@ -111,9 +113,19 @@ object EmailAuthService {
         val parsedMsg =
           runCatching { JSONObject(errorBody).optString("message") }.getOrNull()
             ?.takeIf { it.isNotBlank() }
-        VerificationSendResult.Failed(
-          parsedMsg ?: "Failed to send verification email (HTTP $statusCode)."
-        )
+        val isResendSandboxRestriction =
+          statusCode == 403 ||
+            parsedMsg?.contains("testing emails", ignoreCase = true) == true ||
+            parsedMsg?.contains("verify a domain", ignoreCase = true) == true
+        if (isResendSandboxRestriction) {
+          VerificationSendResult.UseFirebaseEmailLink(
+            "Create your password below — Firebase will send a verification link directly to $cleanEmail."
+          )
+        } else {
+          VerificationSendResult.Failed(
+            parsedMsg ?: "Failed to send verification email (HTTP $statusCode)."
+          )
+        }
       }
     } catch (e: Exception) {
       VerificationSendResult.Failed(

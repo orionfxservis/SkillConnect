@@ -135,6 +135,16 @@ fun GuestAuthStepperCard(
           isErrorBanner = false
           activeStep = 1
         }
+        is VerificationSendResult.UseFirebaseEmailLink -> {
+          issuedCode = null
+          codeExpiresAtMillis = 0L
+          verifyAttempts = 0
+          codeVerified = true
+          verificationCodeInput = ""
+          statusMessage = result.message
+          isErrorBanner = false
+          activeStep = 2
+        }
         is VerificationSendResult.NeedsConfiguration -> {
           statusMessage = result.message
           isErrorBanner = true
@@ -468,7 +478,9 @@ fun GuestAuthStepperCard(
                 color = fieldLabelColor,
               )
               Text(
-                text = "Verified: ${emailInput.trim()} (${selectedCategory.name})",
+                text =
+                  if (issuedCode != null) "Verified: ${emailInput.trim()} (${selectedCategory.name})"
+                  else "Account: ${emailInput.trim()} (${selectedCategory.name})",
                 style = MaterialTheme.typography.bodySmall,
                 color = OnEmeraldContainer,
                 fontWeight = FontWeight.Medium,
