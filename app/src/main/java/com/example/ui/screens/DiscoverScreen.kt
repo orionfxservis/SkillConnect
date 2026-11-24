@@ -682,15 +682,18 @@ private fun CurvedBrandHeader(
           .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 20.dp),
       verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-      // Brand Row + Notification Bell
+      // Brand Row (Logo on left + SkillConnect name) + Notification Bell
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-          SkillConnectLogoMark(modifier = Modifier.size(46.dp))
-          Spacer(modifier = Modifier.width(10.dp))
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.weight(1f),
+        ) {
+          SkillConnectLogoMark(modifier = Modifier.size(50.dp))
+          Spacer(modifier = Modifier.width(12.dp))
           Column {
             Text(
               text =
@@ -698,7 +701,7 @@ private fun CurvedBrandHeader(
                   withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Bold)) {
                     append("Skill")
                   }
-                  withStyle(SpanStyle(color = BrandMint, fontWeight = FontWeight.Bold)) {
+                  withStyle(SpanStyle(color = StarGold, fontWeight = FontWeight.Bold)) {
                     append("Connect")
                   }
                 },
@@ -706,7 +709,7 @@ private fun CurvedBrandHeader(
               lineHeight = 28.sp,
             )
             Text(
-              text = "Find Skilled Professionals Near You",
+              text = "Find • Hire • Get It Done",
               style = MaterialTheme.typography.bodySmall,
               color = Color.White.copy(alpha = 0.9f),
             )
@@ -860,64 +863,17 @@ private fun CurvedBrandHeader(
 
 @Composable
 private fun SkillConnectLogoMark(modifier: Modifier = Modifier) {
-  Canvas(modifier = modifier) {
-    val w = size.width
-    val h = size.height
-    val strokeW = w * 0.068f
-
-    // House roof + chimney
-    val roofPath =
-      Path().apply {
-        moveTo(w * 0.12f, h * 0.48f)
-        lineTo(w * 0.50f, h * 0.16f)
-        lineTo(w * 0.88f, h * 0.48f)
-      }
-    drawPath(
-      path = roofPath,
-      color = Color.White,
-      style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round),
-    )
-    // Chimney
-    drawLine(
-      color = Color.White,
-      start = Offset(w * 0.70f, h * 0.21f),
-      end = Offset(w * 0.70f, h * 0.34f),
-      strokeWidth = strokeW,
-      cap = StrokeCap.Round,
-    )
-    // House walls
-    val wallPath =
-      Path().apply {
-        moveTo(w * 0.21f, h * 0.43f)
-        lineTo(w * 0.21f, h * 0.85f)
-        lineTo(w * 0.79f, h * 0.85f)
-        lineTo(w * 0.79f, h * 0.43f)
-      }
-    drawPath(
-      path = wallPath,
-      color = Color.White,
-      style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round),
-    )
-    // Crossed amber wrench & screwdriver
-    drawLine(
-      color = Color(0xFFF59E0B),
-      start = Offset(w * 0.33f, h * 0.71f),
-      end = Offset(w * 0.67f, h * 0.39f),
-      strokeWidth = strokeW * 1.15f,
-      cap = StrokeCap.Round,
-    )
-    drawCircle(
-      color = Color(0xFFF59E0B),
-      radius = w * 0.08f,
-      center = Offset(w * 0.67f, h * 0.39f),
-      style = Stroke(width = strokeW * 0.8f),
-    )
-    drawLine(
-      color = Color(0xFFFBBF24),
-      start = Offset(w * 0.67f, h * 0.71f),
-      end = Offset(w * 0.35f, h * 0.41f),
-      strokeWidth = strokeW * 1.15f,
-      cap = StrokeCap.Round,
+  Surface(
+    shape = RoundedCornerShape(12.dp),
+    color = Color.Transparent,
+    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+    modifier = modifier,
+  ) {
+    Image(
+      painter = painterResource(id = R.drawable.skillconnect_logo),
+      contentDescription = "SkillConnect logo",
+      contentScale = ContentScale.Crop,
+      modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
     )
   }
 }

@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.VerifiedUser
@@ -118,26 +117,28 @@ fun AuthScreen(onAuthSuccess: () -> Unit) {
       verticalArrangement = Arrangement.SpaceBetween,
     ) {
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = MaterialTheme.colorScheme.primary,
-          tonalElevation = 4.dp,
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.Center,
         ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Icon(
-              imageVector = Icons.Rounded.Build,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.onPrimary,
-              modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+          Image(
+            painter = painterResource(id = R.drawable.skillconnect_logo),
+            contentDescription = "SkillConnect logo",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(13.dp)),
+          )
+          Spacer(modifier = Modifier.width(12.dp))
+          Column {
             Text(
               text = "SkillConnect",
-              style = MaterialTheme.typography.titleLarge,
-              color = MaterialTheme.colorScheme.onPrimary,
+              style = MaterialTheme.typography.headlineSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+              text = "Find • Hire • Get It Done",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
         }
