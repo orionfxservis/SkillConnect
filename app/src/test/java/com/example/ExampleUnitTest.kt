@@ -5,11 +5,16 @@ import com.example.data.LocationHelper
 import com.example.model.BookingStatus
 import com.example.model.ComplaintStatus
 import com.example.model.Coordinates
+import com.example.model.ServiceBooking
 import com.example.model.ServiceCategories
 import com.example.model.ServiceCategoryEntity
+import com.example.model.SubscriptionRulesCalculator
+import com.example.model.SubscriptionTier
 import com.example.model.TechnicianProfile
 import com.example.model.VerificationStatus
 import com.example.ui.sortCandidatesNearToFar
+import com.google.firebase.Timestamp
+import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -111,5 +116,82 @@ class ExampleUnitTest {
     assertFalse(EmailAuthService.isGmailAddress("pro@company.org"))
     assertFalse(EmailAuthService.isValidEmail("not-an-email"))
     assertFalse(EmailAuthService.isValidEmail(""))
+  }
+
+  @Test
+  fun subscription_freeAndProRules_andMonthlyReset_workCorrectly() {
+    val novCal =
+      Calendar.getInstance().apply {
+        set(2026, Calendar.NOVEMBER, 15, 10, 0, 0)
+        set(Calendar.MILLISECOND, 0)
+      }
+    val octCal =
+      Calendar.getInstance().apply {
+        set(2026, Calendar.OCTOBER, 20, 10, 0, 0)
+        set(Calendar.MILLISECOND, 0)
+      }
+    val novTs = Timestamp(novCal.timeInMillis / 1000L, 0)
+    val octTs = Timestamp(octCal.timeInMillis / 1000L, 0)
+
+    val bookings =
+      (1..5).map { idx ->
+        ServiceBooking(
+          id = "nov_$idx",
+          technicianId = "pro_1",
+          status = BookingStatus.ACCEPTED.name,
+          createdAt = novTs,
+        )
+      } +
+        listOf(
+          ServiceBooking(
+            id = "oct_old",
+            technicianId = "pro_1",
+            status = BookingStatus.COMPLETED.name,
+            createdAt = octTs,
+          )
+        )
+
+    val freeStatus =
+      SubscriptionRulesCalculator.computeStatus(
+        tier = SubscriptionTier.FREE,
+        allBookings = bookings,
+        currentUserId = "pro_1",
+        nowMillis = novCal.timeInMillis,
+      )
+    assertEquals(5, freeStatus.confirmedThisMonth)
+    assertEquals(5, freeStatus.requestsThisMonth)
+    assertEquals(6, freeStatus.totalHistoryCount)
+    assertFalse(freeStatus.canConfirmAnotherBooking)
+    assertFalse(freeStatus.canReceiveMoreRequests)
+
+    val proStatus =
+      SubscriptionRulesCalculator.computeStatus(
+        tier = SubscriptionTier.PRO,
+        allBookings = bookings,
+        currentUserId = "pro_1",
+        nowMillis = novCal.timeInMillis,
+      )
+    assertTrue(proStatus.canConfirmAnotherBooking)
+    assertTrue(proStatus.canReceiveMoreRequests)
+    assertEquals("Rs. 499/month", SubscriptionTier.PRO.feeLabel)
+    assertEquals("Automatic reset", SubscriptionTier.FREE.renewalLabel)
+    assertEquals("Subscription renewal", SubscriptionTier.PRO.renewalLabel)
+
+    // Automatic reset in December
+    val decCal =
+      Calendar.getInstance().apply {
+        set(2026, Calendar.DECEMBER, 2, 10, 0, 0)
+        set(Calendar.MILLISECOND, 0)
+      }
+    val decResetStatus =
+      SubscriptionRulesCalculator.computeStatus(
+        tier = SubscriptionTier.FREE,
+        allBookings = bookings,
+        currentUserId = "pro_1",
+        nowMillis = decCal.timeInMillis,
+      )
+    assertEquals(0, decResetStatus.confirmedThisMonth)
+    assertEquals(6, decResetStatus.totalHistoryCount)
+    assertTrue(decResetStatus.canConfirmAnotherBooking)
   }
 }

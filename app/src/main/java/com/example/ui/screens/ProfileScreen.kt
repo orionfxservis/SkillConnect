@@ -1,16 +1,20 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,6 +40,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PersonOutline
 import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -57,12 +62,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.data.ImageEncodingHelper
+import com.example.model.ProviderSubscriptionStatus
 import com.example.model.ServiceCategory
 import com.example.model.ServiceComplaint
+import com.example.model.SubscriptionTier
 import com.example.model.TechnicianProfile
 import com.example.model.UiState
 import com.example.model.UserProfile
@@ -91,6 +100,8 @@ fun ProfileScreen(
   onEnrollTechnicianClick: () -> Unit,
   onSaveProfile: (displayName: String, phoneNumber: String, defaultArea: String) -> Unit,
   onOpenBookings: () -> Unit,
+  onOpenSubscription: () -> Unit,
+  subscriptionStatus: ProviderSubscriptionStatus = ProviderSubscriptionStatus(),
   onOpenTechnician: (String) -> Unit,
   onToggleSavedTechnician: (String) -> Unit,
   onOpenProHub: () -> Unit,
@@ -127,38 +138,72 @@ fun ProfileScreen(
         else -> "Customer"
       }
 
-    Column(
-      modifier =
-        Modifier.fillMaxSize()
-          .widthIn(max = 680.dp)
-          .align(Alignment.TopCenter)
-          .imePadding()
-          .verticalScroll(rememberScrollState())
-          .padding(horizontal = 16.dp, vertical = 10.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+    BoxWithConstraints(
+      modifier = Modifier.fillMaxSize(),
     ) {
-      Text(
-        text = "Profile & Account",
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Bold,
-      )
-
-      if (isSignedIn && profile?.suspended == true) {
-        Surface(
-          color = MaterialTheme.colorScheme.errorContainer,
-          shape = RoundedCornerShape(14.dp),
+      val viewportHeight = maxHeight
+      Column(
+        modifier =
+          Modifier.fillMaxWidth()
+            .heightIn(min = viewportHeight)
+            .widthIn(max = 680.dp)
+            .align(Alignment.TopCenter)
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement =
+          if (isSignedIn) Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
+          else Arrangement.spacedBy(10.dp),
+      ) {
+        Row(
           modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
         ) {
           Text(
-            text = "Your account has been flagged/suspended by Super Admin. Contact support.",
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(12.dp),
+            text = "Profile & Account",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
           )
+          Spacer(modifier = Modifier.width(8.dp))
+          Surface(
+            shape = RoundedCornerShape(50),
+            color = if (isAdmin) MaterialTheme.colorScheme.primaryContainer else EmeraldContainer,
+            modifier = Modifier.testTag("profile_role_badge"),
+          ) {
+            Text(
+              text = roleLabel,
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.SemiBold,
+              color = if (isAdmin) MaterialTheme.colorScheme.onPrimaryContainer else OnEmeraldContainer,
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            )
+          }
         }
-      }
 
-      IdentitySummaryCard(isSignedIn = isSignedIn, isAdmin = isAdmin, roleLabel = roleLabel, profile = profile)
+        if (isSignedIn && profile?.suspended == true) {
+          Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(
+              text = "Your account has been flagged/suspended by Super Admin. Contact support.",
+              color = MaterialTheme.colorScheme.onErrorContainer,
+              style = MaterialTheme.typography.bodySmall,
+              modifier = Modifier.padding(12.dp),
+            )
+          }
+        }
+
+        IdentitySummaryCard(
+          isSignedIn = isSignedIn,
+          profile = profile,
+          technicianProfile = myTechnicianProfile,
+        )
 
       Text(
         text = "Account Settings",
@@ -196,6 +241,20 @@ fun ProfileScreen(
             subtitle = "Track requested, active & completed service jobs",
             onClick = onOpenBookings,
             modifier = Modifier.testTag("menu_my_bookings"),
+          )
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+          AccountMenuRow(
+            icon = Icons.Rounded.WorkspacePremium,
+            title = "My Subscription",
+            subtitle =
+              if (!isSignedIn) "Service Booking Plans • Free & Pro (Rs. 499/mo)"
+              else if (subscriptionStatus.tier == SubscriptionTier.PRO)
+                "Pro Plan • Unlimited bookings (Rs. 499/month)"
+              else
+                "Free Plan • ${subscriptionStatus.confirmedThisMonth}/5 confirmed this month",
+            onClick = onOpenSubscription,
+            modifier = Modifier.testTag("menu_my_subscription"),
           )
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -281,8 +340,7 @@ fun ProfileScreen(
           Text("Sign Out")
         }
       }
-
-      Spacer(modifier = Modifier.height(12.dp))
+    }
     }
   }
 
@@ -326,64 +384,84 @@ fun ProfileScreen(
 @Composable
 private fun IdentitySummaryCard(
   isSignedIn: Boolean,
-  isAdmin: Boolean,
-  roleLabel: String,
   profile: UserProfile?,
+  technicianProfile: TechnicianProfile?,
 ) {
+  val photoDataUrl = technicianProfile?.profilePhotoData.orEmpty()
+  val avatarBitmap =
+    remember(photoDataUrl) {
+      if (photoDataUrl.isNotBlank()) ImageEncodingHelper.decodeDataUrlToImageBitmap(photoDataUrl)
+      else null
+    }
+  val displayName =
+    if (!isSignedIn) {
+      "Guest User"
+    } else {
+      technicianProfile?.fullName?.takeIf { it.isNotBlank() }
+        ?: profile?.displayName?.ifBlank { "SkillConnect Member" }
+        ?: "SkillConnect Member"
+    }
+  val secondaryText =
+    if (!isSignedIn) {
+      "Login or create your account"
+    } else {
+      profile?.email?.ifBlank { profile.defaultArea } ?: ""
+    }
+
   Card(
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
   ) {
     Row(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-        Box(
-          modifier =
-            Modifier.size(44.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.primaryContainer),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(
-            Icons.Rounded.Person,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.size(24.dp),
-          )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = displayName,
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        if (secondaryText.isNotBlank()) {
           Text(
-            text =
-              if (!isSignedIn) "Guest User"
-              else profile?.displayName?.ifBlank { "SkillConnect Member" } ?: "SkillConnect Member",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-          Text(
-            text =
-              if (!isSignedIn) "Login or create your account"
-              else profile?.email?.ifBlank { profile.defaultArea } ?: "",
+            text = secondaryText,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
           )
         }
       }
 
-      Surface(
-        shape = RoundedCornerShape(50),
-        color = if (isAdmin) MaterialTheme.colorScheme.primaryContainer else EmeraldContainer,
+      Spacer(modifier = Modifier.width(12.dp))
+
+      Box(
+        modifier =
+          Modifier.size(48.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), CircleShape),
+        contentAlignment = Alignment.Center,
       ) {
-        Text(
-          text = roleLabel,
-          style = MaterialTheme.typography.labelMedium,
-          color = if (isAdmin) MaterialTheme.colorScheme.onPrimaryContainer else OnEmeraldContainer,
-          modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
+        if (avatarBitmap != null) {
+          Image(
+            bitmap = avatarBitmap,
+            contentDescription = "$displayName profile photo",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().clip(CircleShape),
+          )
+        } else {
+          Icon(
+            Icons.Rounded.Person,
+            contentDescription = "User profile image",
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.size(26.dp),
+          )
+        }
       }
     }
   }

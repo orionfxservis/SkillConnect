@@ -6,10 +6,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.FixNearRepository
 import com.example.data.LocationHelper
+import com.example.data.SubscriptionPreferencesStore
 import com.example.model.BookingStatus
 import com.example.model.ChatMessage
 import com.example.model.ComplaintStatus
 import com.example.model.Coordinates
+import com.example.model.ProviderSubscriptionStatus
 import com.example.model.ProviderVerificationDoc
 import com.example.model.ServiceBooking
 import com.example.model.ServiceCategories
@@ -17,6 +19,8 @@ import com.example.model.ServiceCategory
 import com.example.model.ServiceCategoryEntity
 import com.example.model.ServiceComplaint
 import com.example.model.ServiceReview
+import com.example.model.SubscriptionRulesCalculator
+import com.example.model.SubscriptionTier
 import com.example.model.TechnicianProfile
 import com.example.model.TechnicianRegistrationInput
 import com.example.model.UiState
@@ -24,6 +28,7 @@ import com.example.model.UserProfile
 import com.example.model.VerificationStatus
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestoreException
+import java.util.Calendar
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -77,6 +82,7 @@ class FixNearViewModel(
   private val repository: FixNearRepository,
   val currentUserId: String?,
   private val firebaseUser: FirebaseUser?,
+  private val subscriptionStore: SubscriptionPreferencesStore? = null,
 ) : ViewModel() {
 
   val isSignedIn: Boolean = !currentUserId.isNullOrBlank() && firebaseUser != null
@@ -128,6 +134,11 @@ class FixNearViewModel(
 
   private val _phoneVerifiedSession = MutableStateFlow(false)
   val phoneVerifiedSession: StateFlow<Boolean> = _phoneVerifiedSession.asStateFlow()
+
+  private val _subscriptionTier =
+    MutableStateFlow(subscriptionStore?.loadTier(currentUserId) ?: SubscriptionTier.FREE)
+  private val _proRenewalAtMillis =
+    MutableStateFlow(subscriptionStore?.loadProRenewalMillis(currentUserId))
 
   init {
     if (firebaseUser != null) {
@@ -330,6 +341,28 @@ class FixNearViewModel(
     if (currentUserId != null)
       repository.observeMyBookings(currentUserId).toUiStateFlow("bookings")
     else MutableStateFlow(UiState.Success(emptyList()))
+
+  val subscriptionStatusState: StateFlow<ProviderSubscriptionStatus> =
+    combine(_subscriptionTier, _proRenewalAtMillis, bookingsState) { tier, renewalMillis, bState ->
+        val bookings = (bState as? UiState.Success)?.data ?: emptyList()
+        SubscriptionRulesCalculator.computeStatus(
+          tier = tier,
+          allBookings = bookings,
+          currentUserId = currentUserId,
+          proRenewalAtMillis = renewalMillis,
+        )
+      }
+      .stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue =
+          SubscriptionRulesCalculator.computeStatus(
+            tier = _subscriptionTier.value,
+            allBookings = emptyList(),
+            currentUserId = currentUserId,
+            proRenewalAtMillis = _proRenewalAtMillis.value,
+          ),
+      )
 
   val myComplaintsState: StateFlow<UiState<List<ServiceComplaint>>> =
     if (currentUserId != null)
@@ -651,7 +684,45 @@ class FixNearViewModel(
     }
   }
 
+  fun upgradeToProPlan() {
+    val nextRenewal =
+      Calendar.getInstance().apply { add(Calendar.MONTH, 1) }.timeInMillis
+    _subscriptionTier.value = SubscriptionTier.PRO
+    _proRenewalAtMillis.value = nextRenewal
+    subscriptionStore?.savePlan(currentUserId, SubscriptionTier.PRO, nextRenewal)
+    _actionMessage.value = "Pro Plan active (Rs. 499/month) — Unlimited bookings unlocked!"
+  }
+
+  fun renewProPlan() {
+    val base = maxOf(System.currentTimeMillis(), _proRenewalAtMillis.value ?: 0L)
+    val nextRenewal =
+      Calendar.getInstance().apply {
+        timeInMillis = base
+        add(Calendar.MONTH, 1)
+      }.timeInMillis
+    _subscriptionTier.value = SubscriptionTier.PRO
+    _proRenewalAtMillis.value = nextRenewal
+    subscriptionStore?.savePlan(currentUserId, SubscriptionTier.PRO, nextRenewal)
+    _actionMessage.value = "Pro subscription renewed for next month."
+  }
+
+  fun switchToFreePlan() {
+    _subscriptionTier.value = SubscriptionTier.FREE
+    _proRenewalAtMillis.value = null
+    subscriptionStore?.savePlan(currentUserId, SubscriptionTier.FREE, null)
+    _actionMessage.value = "Switched to Free Plan (5 monthly confirmed bookings)."
+  }
+
   fun updateBookingStatus(booking: ServiceBooking, status: BookingStatus) {
+    if (
+      status == BookingStatus.ACCEPTED &&
+        booking.technicianId == currentUserId &&
+        !subscriptionStatusState.value.canConfirmAnotherBooking
+    ) {
+      _actionMessage.value =
+        "Free plan limit reached (5/5 confirmed bookings this month). Upgrade to Pro in Profile → My Subscription for unlimited bookings."
+      return
+    }
     viewModelScope.launch {
       _isBusy.value = true
       val result = repository.advanceBookingStatus(booking, status)

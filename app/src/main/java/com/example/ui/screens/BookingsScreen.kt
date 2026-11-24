@@ -47,8 +47,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.model.BookingStatus
+import com.example.model.ProviderSubscriptionStatus
 import com.example.model.ServiceBooking
 import com.example.model.ServiceCategories
+import com.example.model.SubscriptionTier
 import com.example.model.UiState
 import com.example.ui.theme.AmberContainer
 import com.example.ui.theme.EmeraldContainer
@@ -60,8 +62,10 @@ import com.example.ui.theme.OnEmeraldContainer
 fun BookingsScreen(
   bookingsState: UiState<List<ServiceBooking>>,
   currentUserId: String?,
+  subscriptionStatus: ProviderSubscriptionStatus = ProviderSubscriptionStatus(),
   onSignInClick: () -> Unit,
   onOpenBooking: (String) -> Unit,
+  onOpenSubscription: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   var selectedTab by remember { mutableIntStateOf(0) }
@@ -150,6 +154,59 @@ fun BookingsScreen(
             modifier = Modifier.testTag("tab_incoming_jobs"),
           ) {
             Text(if (incomingCount > 0) "Incoming Jobs ($incomingCount)" else "Incoming Jobs")
+          }
+        }
+
+        if (selectedTab == 1) {
+          Spacer(modifier = Modifier.height(10.dp))
+          val isPro = subscriptionStatus.tier == SubscriptionTier.PRO
+          val limitReached = !subscriptionStatus.canConfirmAnotherBooking
+          Surface(
+            onClick = onOpenSubscription,
+            shape = RoundedCornerShape(12.dp),
+            color =
+              when {
+                isPro -> EmeraldContainer.copy(alpha = 0.7f)
+                limitReached -> AmberContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+              },
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth().testTag("bookings_subscription_banner"),
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text =
+                    if (isPro) "Pro Plan • Unlimited bookings active"
+                    else if (limitReached) "Free Plan Limit Reached (5/5 confirmed)"
+                    else "Free Plan • ${subscriptionStatus.confirmedThisMonth}/5 confirmed • ${subscriptionStatus.requestsThisMonth}/5 requests",
+                  style = MaterialTheme.typography.labelMedium,
+                  color =
+                    when {
+                      isPro -> OnEmeraldContainer
+                      limitReached -> OnAmberContainer
+                      else -> MaterialTheme.colorScheme.onSurface
+                    },
+                )
+                Text(
+                  text =
+                    if (isPro) "Booking history available • Subscription renewal active"
+                    else "Automatic reset on ${subscriptionStatus.nextResetDateLabel} • Tap for Pro (Rs. 499/mo)",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = if (isPro) "Plans" else "Upgrade",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+              )
+            }
           }
         }
       }

@@ -77,9 +77,11 @@ import com.example.model.ServiceBooking
 import com.example.model.ServiceComplaint
 import com.example.model.TechnicianProfile
 import com.example.model.UiState
+import com.example.ui.theme.AmberContainer
 import com.example.ui.theme.DispatchAmber
 import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.EmeraldLive
+import com.example.ui.theme.OnAmberContainer
 import com.example.ui.theme.OnEmeraldContainer
 import com.example.ui.theme.StarGold
 import com.example.ui.theme.greenThemeTextFieldColors
@@ -96,12 +98,14 @@ fun BookingDetailAndChatScreen(
   currentUserName: String,
   isLiveBroadcastActive: Boolean,
   isBusy: Boolean,
+  canConfirmBooking: Boolean = true,
   onBack: () -> Unit,
   onUpdateStatus: (ServiceBooking, BookingStatus) -> Unit,
   onToggleLiveGpsBroadcast: () -> Unit,
   onSendMessage: (ServiceBooking, String, String) -> Unit,
   onSubmitReview: (ServiceBooking, Int, String, List<String>) -> Unit,
   onSubmitComplaint: (ServiceBooking, String, String, String) -> Unit,
+  onOpenSubscription: () -> Unit = {},
 ) {
   val context = LocalContext.current
   var messageDraft by remember { mutableStateOf("") }
@@ -161,6 +165,7 @@ fun BookingDetailAndChatScreen(
                     isTechnician = isTechnician,
                     isLiveBroadcastActive = isLiveBroadcastActive,
                     isBusy = isBusy,
+                    canConfirmBooking = canConfirmBooking,
                     onCallCounterpart = { phone ->
                       val intent =
                         Intent(Intent.ACTION_DIAL).apply { data = Uri.parse("tel:$phone") }
@@ -170,6 +175,7 @@ fun BookingDetailAndChatScreen(
                     onToggleLiveGpsBroadcast = onToggleLiveGpsBroadcast,
                     onOpenReview = { showReviewDialog = true },
                     onOpenReport = { showReportDialog = true },
+                    onOpenSubscription = onOpenSubscription,
                   )
                 }
 
@@ -302,11 +308,13 @@ private fun DispatchStatusCard(
   isTechnician: Boolean,
   isLiveBroadcastActive: Boolean,
   isBusy: Boolean,
+  canConfirmBooking: Boolean = true,
   onCallCounterpart: (String) -> Unit,
   onUpdateStatus: (BookingStatus) -> Unit,
   onToggleLiveGpsBroadcast: () -> Unit,
   onOpenReview: () -> Unit,
   onOpenReport: () -> Unit,
+  onOpenSubscription: () -> Unit = {},
 ) {
   val status = booking.bookingStatus
   val (pillBg, pillFg) = statusColors(status)
@@ -481,6 +489,27 @@ private fun DispatchStatusCard(
                   )
                 }
               }
+            }
+          }
+        }
+
+        if (status == BookingStatus.REQUESTED && !canConfirmBooking) {
+          Surface(
+            color = AmberContainer,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenSubscription),
+          ) {
+            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              Text(
+                text = "Free Plan Monthly Limit Reached (5/5 Confirmed)",
+                style = MaterialTheme.typography.labelMedium,
+                color = OnAmberContainer,
+              )
+              Text(
+                text = "Tap here to upgrade to Pro (Rs. 499/month) in My Subscription for unlimited bookings.",
+                style = MaterialTheme.typography.bodySmall,
+                color = OnAmberContainer,
+              )
             }
           }
         }

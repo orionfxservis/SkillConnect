@@ -77,11 +77,13 @@ import androidx.navigation.navArgument
 import com.example.data.FixNearRepository
 import com.example.data.LocationHelper
 import com.example.model.UiState
+import com.example.data.SubscriptionPreferencesStore
 import com.example.ui.FixNearViewModel
 import com.example.ui.screens.BookingDetailAndChatScreen
 import com.example.ui.screens.BookingsScreen
 import com.example.ui.screens.CategoryCandidatesScreen
 import com.example.ui.screens.DiscoverScreen
+import com.example.ui.screens.MySubscriptionScreen
 import com.example.ui.screens.NearbyMapScreen
 import com.example.ui.screens.ProHubScreen
 import com.example.ui.screens.ProfileScreen
@@ -108,6 +110,7 @@ object AppRoutes {
   const val BOOKINGS = "bookings"
   const val PRO_HUB = "pro_hub"
   const val PROFILE = "profile"
+  const val SUBSCRIPTION = "my_subscription"
   const val SUPER_ADMIN = "super_admin"
   const val CATEGORY_CANDIDATES = "category_candidates/{categoryId}"
   const val TECH_DETAIL = "technician_detail/{techId}"
@@ -240,6 +243,7 @@ fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
                 repository = FixNearRepository(db = db, auth = auth),
                 currentUserId = user?.uid,
                 firebaseUser = user,
+                subscriptionStore = SubscriptionPreferencesStore(app),
               )
             }
           },
@@ -278,6 +282,7 @@ private fun MainFixNearShell(
     viewModel.allTechniciansSortedByDistanceState.collectAsStateWithLifecycle()
   val savedTechnicians by viewModel.savedTechniciansState.collectAsStateWithLifecycle()
   val bookingsState by viewModel.bookingsState.collectAsStateWithLifecycle()
+  val subscriptionStatus by viewModel.subscriptionStatusState.collectAsStateWithLifecycle()
   val myComplaintsState by viewModel.myComplaintsState.collectAsStateWithLifecycle()
   val inspectedTechState by viewModel.inspectedTechnicianState.collectAsStateWithLifecycle()
   val inspectedReviewsState by viewModel.inspectedTechnicianReviewsState.collectAsStateWithLifecycle()
@@ -623,11 +628,13 @@ private fun MainFixNearShell(
             BookingsScreen(
               bookingsState = bookingsState,
               currentUserId = viewModel.currentUserId,
+              subscriptionStatus = subscriptionStatus,
               onSignInClick = { triggerGoogleSignIn(AppRoutes.BOOKINGS) },
               onOpenBooking = { bookingId ->
                 viewModel.inspectBooking(bookingId)
                 navController.navigate(AppRoutes.bookingDetail(bookingId))
               },
+              onOpenSubscription = { navController.navigate(AppRoutes.SUBSCRIPTION) },
             )
           }
 
@@ -688,6 +695,8 @@ private fun MainFixNearShell(
                 viewModel.saveUserProfile(name, phone, area)
               },
               onOpenBookings = { navigateTopLevel(AppRoutes.BOOKINGS) },
+              onOpenSubscription = { navController.navigate(AppRoutes.SUBSCRIPTION) },
+              subscriptionStatus = subscriptionStatus,
               onOpenTechnician = { techId ->
                 viewModel.inspectTechnician(techId)
                 navController.navigate(AppRoutes.techDetail(techId))
@@ -700,6 +709,22 @@ private fun MainFixNearShell(
               onSignOut = {
                 viewModel.setLiveBroadcastActive(false)
                 signOutUser(credentialManager = credentialManager, scope = scope)
+              },
+            )
+          }
+
+          composable(AppRoutes.SUBSCRIPTION) {
+            MySubscriptionScreen(
+              isSignedIn = viewModel.isSignedIn,
+              status = subscriptionStatus,
+              onBack = { navController.popBackStack() },
+              onOpenBookings = { navigateTopLevel(AppRoutes.BOOKINGS) },
+              onUpgradeToPro = viewModel::upgradeToProPlan,
+              onRenewPro = viewModel::renewProPlan,
+              onSwitchToFree = viewModel::switchToFreePlan,
+              onSignInPrompt = {
+                navController.popBackStack()
+                navigateTopLevel(AppRoutes.PROFILE)
               },
             )
           }
@@ -789,6 +814,7 @@ private fun MainFixNearShell(
               currentUserName = currentUserName,
               isLiveBroadcastActive = isLiveBroadcastActive,
               isBusy = isBusy,
+              canConfirmBooking = subscriptionStatus.canConfirmAnotherBooking,
               onBack = { navController.popBackStack() },
               onUpdateStatus = viewModel::updateBookingStatus,
               onToggleLiveGpsBroadcast = {
@@ -805,6 +831,7 @@ private fun MainFixNearShell(
               onSubmitComplaint = { booking, reporterName, reason, description ->
                 viewModel.submitComplaint(booking, reporterName, reason, description)
               },
+              onOpenSubscription = { navController.navigate(AppRoutes.SUBSCRIPTION) },
             )
           }
         }
