@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -58,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,8 +69,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.example.data.ImageEncodingHelper
 import com.example.data.LocationHelper
 import com.example.model.Coordinates
@@ -95,12 +99,31 @@ fun CategoryCandidatesScreen(
   onBack: () -> Unit,
   onOpenTechnician: (String) -> Unit,
   onOpenProHub: () -> Unit,
+  onExploreServices: () -> Unit = onBack,
+  onOpenMap: () -> Unit = {},
+  onOpenSubscription: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  val listState = rememberLazyListState()
   val category = remember(categoryId, categories) { ServiceCategories.byId(categoryId, categories) }
   var localQuery by remember(categoryId) { mutableStateOf("") }
   var selectedSub by remember(categoryId) { mutableStateOf<String?>(null) }
+
+  val handlePromoSlideAction: (CategoryPromoAction) -> Unit = { action ->
+    when (action) {
+      CategoryPromoAction.EXPLORE_SERVICES -> onExploreServices()
+      CategoryPromoAction.FIND_PROFESSIONAL -> {
+        localQuery = ""
+        selectedSub = null
+        scope.launch { listState.animateScrollToItem(0) }
+      }
+      CategoryPromoAction.JOIN_SKILLCONNECT -> onOpenProHub()
+      CategoryPromoAction.FIND_NEARBY_SERVICES -> onOpenMap()
+      CategoryPromoAction.EXPLORE_PRO_PLAN -> onOpenSubscription()
+    }
+  }
 
   val categoryCandidates =
     remember(allTechniciansState, category.id, categories, localQuery, selectedSub) {
@@ -316,112 +339,122 @@ fun CategoryCandidatesScreen(
         }
 
         // Candidates List
-        when (categoryCandidates) {
-          is UiState.Loading -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-              CircularProgressIndicator()
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+          when (categoryCandidates) {
+            is UiState.Loading -> {
+              Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+              }
             }
-          }
-          is UiState.Error -> {
-            ErrorCard(
-              message = categoryCandidates.message,
-              modifier = Modifier.padding(16.dp),
-            )
-          }
-          is UiState.Success -> {
-            val candidates = categoryCandidates.data
-            if (candidates.isEmpty()) {
-              Box(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                contentAlignment = Alignment.Center,
-              ) {
-                Card(
-                  shape = RoundedCornerShape(20.dp),
-                  colors = CardDefaults.cardColors(containerColor = Color.White),
-                  border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                  modifier = Modifier.fillMaxWidth(),
+            is UiState.Error -> {
+              ErrorCard(
+                message = categoryCandidates.message,
+                modifier = Modifier.padding(16.dp),
+              )
+            }
+            is UiState.Success -> {
+              val candidates = categoryCandidates.data
+              if (candidates.isEmpty()) {
+                Box(
+                  modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+                  contentAlignment = Alignment.Center,
                 ) {
-                  Column(
-                    modifier = Modifier.fillMaxWidth().padding(22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                  Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth(),
                   ) {
-                    Box(
-                      modifier =
-                        Modifier.size(56.dp)
-                          .clip(CircleShape)
-                          .background(category.tint.copy(alpha = 0.14f)),
-                      contentAlignment = Alignment.Center,
+                    Column(
+                      modifier = Modifier.fillMaxWidth().padding(22.dp),
+                      horizontalAlignment = Alignment.CenterHorizontally,
+                      verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                      Icon(
-                        imageVector = category.icon,
-                        contentDescription = null,
-                        tint = category.tint,
-                        modifier = Modifier.size(28.dp),
-                      )
-                    }
-                    Text(
-                      text = "No ${category.name} candidates found",
-                      style = MaterialTheme.typography.titleMedium,
-                      fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                      text =
-                        if (localQuery.isNotBlank() || selectedSub != null)
-                          "Try clearing your search or subcategory filter."
-                        else
-                          "Be the first ${category.name} professional in this category by enrolling in Pro Hub.",
-                      style = MaterialTheme.typography.bodySmall,
-                      color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (localQuery.isNotBlank() || selectedSub != null) {
-                      OutlinedButton(
-                        onClick = {
-                          localQuery = ""
-                          selectedSub = null
-                        },
-                        shape = RoundedCornerShape(12.dp),
+                      Box(
+                        modifier =
+                          Modifier.size(56.dp)
+                            .clip(CircleShape)
+                            .background(category.tint.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center,
                       ) {
-                        Text("Show All ${category.name}")
+                        Icon(
+                          imageVector = category.icon,
+                          contentDescription = null,
+                          tint = category.tint,
+                          modifier = Modifier.size(28.dp),
+                        )
                       }
-                    } else {
-                      Button(
-                        onClick = onOpenProHub,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DeepTeal),
-                      ) {
-                        Text("Enrol as ${category.name}")
+                      Text(
+                        text = "No ${category.name} candidates found",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                      )
+                      Text(
+                        text =
+                          if (localQuery.isNotBlank() || selectedSub != null)
+                            "Try clearing your search or subcategory filter."
+                          else
+                            "Be the first ${category.name} professional in this category by enrolling in Pro Hub.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                      )
+                      if (localQuery.isNotBlank() || selectedSub != null) {
+                        OutlinedButton(
+                          onClick = {
+                            localQuery = ""
+                            selectedSub = null
+                          },
+                          shape = RoundedCornerShape(12.dp),
+                        ) {
+                          Text("Show All ${category.name}")
+                        }
+                      } else {
+                        Button(
+                          onClick = onOpenProHub,
+                          shape = RoundedCornerShape(12.dp),
+                          colors = ButtonDefaults.buttonColors(containerColor = DeepTeal),
+                        ) {
+                          Text("Enrol as ${category.name}")
+                        }
                       }
                     }
                   }
                 }
-              }
-            } else {
-              LazyColumn(
-                modifier = Modifier.fillMaxSize().testTag("category_candidates_list"),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-              ) {
-                items(candidates, key = { it.technician.userId }) { entry ->
-                  CategoryCandidateCard(
-                    entry = entry,
-                    category = category,
-                    onCallClick = {
-                      runCatching {
-                        val dialIntent =
-                          Intent(Intent.ACTION_DIAL).apply {
-                            data = Uri.parse("tel:${entry.technician.contactPhone}")
-                          }
-                        context.startActivity(dialIntent)
-                      }
-                    },
-                    onOpenDetails = { onOpenTechnician(entry.technician.userId) },
-                  )
+              } else {
+                LazyColumn(
+                  state = listState,
+                  modifier = Modifier.fillMaxSize().testTag("category_candidates_list"),
+                  contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                  verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                  items(candidates, key = { it.technician.userId }) { entry ->
+                    CategoryCandidateCard(
+                      entry = entry,
+                      category = category,
+                      onCallClick = {
+                        runCatching {
+                          val dialIntent =
+                            Intent(Intent.ACTION_DIAL).apply {
+                              data = Uri.parse("tel:${entry.technician.contactPhone}")
+                            }
+                          context.startActivity(dialIntent)
+                        }
+                      },
+                      onOpenDetails = { onOpenTechnician(entry.technician.userId) },
+                    )
+                  }
                 }
               }
             }
           }
         }
+
+        // Banner Carousel + Five Dots pinned at bottom matching the main page
+        CategoryPromoBannerCarousel(
+          onSlideAction = handlePromoSlideAction,
+          modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+        )
       }
     }
   }

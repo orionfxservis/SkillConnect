@@ -302,75 +302,9 @@ fun DiscoverScreen(
           }
         }
       } else {
-        // Fixed Hero Banner Carousel + Dot Indicators (no vertical scroll on Home)
-        Column(modifier = Modifier.padding(top = 8.dp)) {
-          HorizontalPager(
-            state = pagerState,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            pageSpacing = 12.dp,
-            modifier = Modifier.fillMaxWidth(),
-          ) { page ->
-            when (page) {
-              0 ->
-                HeroPromoSlide(
-                  title = "Skilled Help.\nJust a Tap Away!",
-                  subtitle = "Find verified professionals\nnear your location",
-                  ctaLabel = "Explore Now",
-                  drawableRes = R.drawable.img_hero_technician,
-                  onCtaClick = {
-                    onOpenCategory(orderedCategories.firstOrNull()?.id ?: "electrician")
-                  },
-                )
-              1 ->
-                HeroPromoSlide(
-                  title = if (isEnrolled) "Manage Your\nPro Dispatch!" else "Are You a\nSkilled Pro?",
-                  subtitle =
-                    if (isEnrolled) "Share live GPS & accept\nnearby client requests"
-                    else "Enroll free & grow your\nlocal service bookings",
-                  ctaLabel = if (isEnrolled) "Open Pro Hub" else "Join Pro Hub",
-                  drawableRes = R.drawable.img_hero_technician,
-                  onCtaClick = onOpenProHub,
-                )
-              else ->
-                HeroPromoSlide(
-                  title = "Live GPS\nDispatch Radar",
-                  subtitle = "Track available pros near you\nwith zero payment gates",
-                  ctaLabel = "Open Map",
-                  drawableRes = R.drawable.img_hero_dispatch,
-                  onCtaClick = onOpenMap,
-                )
-            }
-          }
-
-          Spacer(modifier = Modifier.height(6.dp))
-
-          // Carousel Page Indicator Dots
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            repeat(3) { index ->
-              val selected = pagerState.currentPage == index
-              Box(
-                modifier =
-                  Modifier.padding(horizontal = 4.dp)
-                    .size(width = if (selected) 10.dp else 8.dp, height = 8.dp)
-                    .clip(CircleShape)
-                    .background(
-                      if (selected) DeepTeal else MaterialTheme.colorScheme.outline
-                    )
-                    .clickable {
-                      scope.launch { pagerState.animateScrollToPage(index) }
-                    }
-              )
-            }
-          }
-        }
-
         // Fixed Popular Categories Header + Left/Right Horizontally Scrolling Category Cards
         Column(
-          modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 6.dp),
+          modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp, bottom = 4.dp),
         ) {
           Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -499,6 +433,72 @@ fun DiscoverScreen(
                   }
                 }
               }
+            }
+          }
+        }
+
+        // Fixed Hero Banner Carousel + Dot Indicators at the bottom of Categories
+        Column(modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)) {
+          HorizontalPager(
+            state = pagerState,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            pageSpacing = 12.dp,
+            modifier = Modifier.fillMaxWidth(),
+          ) { page ->
+            when (page) {
+              0 ->
+                HeroPromoSlide(
+                  title = "Skilled Help.\nJust a Tap Away!",
+                  subtitle = "Find verified professionals\nnear your location",
+                  ctaLabel = "Explore Now",
+                  drawableRes = R.drawable.img_hero_technician,
+                  onCtaClick = {
+                    onOpenCategory(orderedCategories.firstOrNull()?.id ?: "electrician")
+                  },
+                )
+              1 ->
+                HeroPromoSlide(
+                  title = if (isEnrolled) "Manage Your\nPro Dispatch!" else "Are You a\nSkilled Pro?",
+                  subtitle =
+                    if (isEnrolled) "Share live GPS & accept\nnearby client requests"
+                    else "Enroll free & grow your\nlocal service bookings",
+                  ctaLabel = if (isEnrolled) "Open Pro Hub" else "Join Pro Hub",
+                  drawableRes = R.drawable.img_hero_technician,
+                  onCtaClick = onOpenProHub,
+                )
+              else ->
+                HeroPromoSlide(
+                  title = "Live GPS\nDispatch Radar",
+                  subtitle = "Track available pros near you\nwith zero payment gates",
+                  ctaLabel = "Open Map",
+                  drawableRes = R.drawable.img_hero_dispatch,
+                  onCtaClick = onOpenMap,
+                )
+            }
+          }
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          // Carousel Page Indicator Dots
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            repeat(3) { index ->
+              val selected = pagerState.currentPage == index
+              Box(
+                modifier =
+                  Modifier.padding(horizontal = 4.dp)
+                    .size(width = if (selected) 10.dp else 8.dp, height = 8.dp)
+                    .clip(CircleShape)
+                    .background(
+                      if (selected) DeepTeal else MaterialTheme.colorScheme.outline
+                    )
+                    .clickable {
+                      scope.launch { pagerState.animateScrollToPage(index) }
+                    }
+              )
             }
           }
         }

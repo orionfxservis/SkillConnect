@@ -205,6 +205,13 @@ fun ProfileScreen(
           technicianProfile = myTechnicianProfile,
         )
 
+        if (isSignedIn) {
+          ProfileSubscriptionBannerSection(
+            subscriptionStatus = subscriptionStatus,
+            onOpenSubscription = onOpenSubscription,
+          )
+        }
+
       Text(
         text = "Account Settings",
         style = MaterialTheme.typography.titleSmall,

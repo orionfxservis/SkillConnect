@@ -604,6 +604,9 @@ private fun MainFixNearShell(
                 navController.navigate(AppRoutes.techDetail(techId))
               },
               onOpenProHub = { navigateTopLevel(AppRoutes.PRO_HUB) },
+              onExploreServices = { navigateTopLevel(AppRoutes.DISCOVER) },
+              onOpenMap = { navigateTopLevel(AppRoutes.MAP) },
+              onOpenSubscription = { navController.navigate(AppRoutes.SUBSCRIPTION) },
             )
           }
 

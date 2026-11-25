@@ -12,6 +12,8 @@ import com.example.model.SubscriptionRulesCalculator
 import com.example.model.SubscriptionTier
 import com.example.model.TechnicianProfile
 import com.example.model.VerificationStatus
+import com.example.ui.screens.CategoryPromoAction
+import com.example.ui.screens.CategoryPromoSlides
 import com.example.ui.sortCandidatesNearToFar
 import com.google.firebase.Timestamp
 import java.util.Calendar
@@ -193,5 +195,30 @@ class ExampleUnitTest {
     assertEquals(0, decResetStatus.confirmedThisMonth)
     assertEquals(6, decResetStatus.totalHistoryCount)
     assertTrue(decResetStatus.canConfirmAnotherBooking)
+  }
+
+  @Test
+  fun categoryPromoSlides_containFiveUniqueSlidesAndImages() {
+    val slides = CategoryPromoSlides.defaults
+    assertEquals(5, slides.size)
+    assertEquals(5, slides.map { it.imageRes }.toSet().size)
+    assertEquals(5, slides.map { it.action }.toSet().size)
+
+    assertEquals("Find the Right Professional!", slides[0].headline)
+    assertEquals("Explore Services", slides[0].ctaLabel)
+    assertEquals(CategoryPromoAction.EXPLORE_SERVICES, slides[0].action)
+
+    assertEquals("Your Home, Our Professionals.", slides[1].headline)
+    assertEquals("Find a Professional", slides[1].ctaLabel)
+
+    assertEquals("Turn Your Skills Into Opportunities!", slides[2].headline)
+    assertEquals("Join SkillConnect", slides[2].ctaLabel)
+
+    assertEquals("Local Services Made Easy.", slides[3].headline)
+    assertEquals("Find Nearby Services", slides[3].ctaLabel)
+
+    assertEquals("Ready for More Bookings?", slides[4].headline)
+    assertEquals("Explore Pro Plan", slides[4].ctaLabel)
+    assertEquals(CategoryPromoAction.EXPLORE_PRO_PLAN, slides[4].action)
   }
 }
