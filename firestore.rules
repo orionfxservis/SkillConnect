@@ -177,6 +177,58 @@ service cloud.firestore {
              isValidTimestamp(data.updatedAt);
     }
 
+    function isValidBanner(data) {
+      return data.bannerId is string && isValidId(data.bannerId) &&
+             data.placement in ['HOME', 'CATEGORY'] &&
+             data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 60 &&
+             data.eyebrow is string && data.eyebrow.size() <= 80 &&
+             data.headline is string && data.headline.size() >= 2 && data.headline.size() <= 120 &&
+             data.description is string && data.description.size() <= 240 &&
+             data.ctaLabel is string && data.ctaLabel.size() >= 1 && data.ctaLabel.size() <= 40 &&
+             data.ctaAction is string && data.ctaAction.size() >= 1 && data.ctaAction.size() <= 80 &&
+             data.imageData is string && data.imageData.size() <= 240000 &&
+             data.active is bool &&
+             data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPayment(data) {
+      return data.paymentId is string && isValidId(data.paymentId) &&
+             data.userId is string && isValidId(data.userId) &&
+             data.providerName is string && data.providerName.size() >= 2 && data.providerName.size() <= 80 &&
+             data.providerPhone is string && data.providerPhone.size() <= 30 &&
+             data.categoryName is string && data.categoryName.size() <= 60 &&
+             data.planType in ['PRO_NEW', 'PRO_RENEWAL', 'FEATURED', 'OTHER'] &&
+             (data.amountPkr is int || data.amountPkr is float) && data.amountPkr >= 0 && data.amountPkr <= 1000000 &&
+             data.paymentMethod in ['JazzCash', 'EasyPaisa', 'Bank Transfer', 'Cash', 'Google Play'] &&
+             data.transactionRef is string && data.transactionRef.size() >= 1 && data.transactionRef.size() <= 80 &&
+             data.billingPeriodMonths is int && data.billingPeriodMonths >= 1 && data.billingPeriodMonths <= 24 &&
+             data.receiptNote is string && data.receiptNote.size() <= 400 &&
+             data.receiptImageData is string && data.receiptImageData.size() <= 240000 &&
+             data.status in ['PENDING', 'APPROVED', 'REJECTED', 'REFUNDED'] &&
+             data.isRenewal is bool &&
+             data.adminRemarks is string && data.adminRemarks.size() <= 300 &&
+             (!('reviewedBy' in data) || (data.reviewedBy is string && data.reviewedBy.size() <= 120)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProviderSubscription(data) {
+      return data.userId is string && isValidId(data.userId) &&
+             data.providerName is string && data.providerName.size() >= 1 && data.providerName.size() <= 80 &&
+             data.providerPhone is string && data.providerPhone.size() <= 30 &&
+             data.tier in ['FREE', 'PRO'] &&
+             data.renewalStatus in ['ACTIVE', 'RENEWAL_PENDING', 'EXPIRED', 'SUSPENDED'] &&
+             data.renewalExpiresAtMillis is int && data.renewalExpiresAtMillis >= 0 &&
+             data.lastPaymentId is string && data.lastPaymentId.size() <= 128 &&
+             (data.lastPaymentAmount is int || data.lastPaymentAmount is float) && data.lastPaymentAmount >= 0 &&
+             data.approvedByAdmin is bool &&
+             data.adminRemarks is string && data.adminRemarks.size() <= 300 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
     // --- 1. Private User Profiles ---
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -576,6 +628,135 @@ service cloud.firestore {
                        ]);
 
       allow delete: if isAdmin() && isValidId(complaintId);
+    }
+
+    // --- 8. Promotional Banners (Public Read of Active Banners, Admin Write) ---
+    match /banners/{bannerId} {
+      allow get: if isValidId(bannerId) && (existing().active == true || isAdmin());
+      allow list: if existing().active == true || isBootstrappedAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidId(bannerId) &&
+                       incoming().bannerId == bannerId &&
+                       incoming().keys().hasAll([
+                         'bannerId', 'placement', 'categoryId', 'eyebrow', 'headline', 'description',
+                         'ctaLabel', 'ctaAction', 'imageData', 'active', 'sortOrder', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'bannerId', 'placement', 'categoryId', 'eyebrow', 'headline', 'description',
+                         'ctaLabel', 'ctaAction', 'imageData', 'active', 'sortOrder', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidBanner(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(bannerId) &&
+                       isValidBanner(incoming()) &&
+                       incoming().bannerId == existing().bannerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'placement', 'categoryId', 'eyebrow', 'headline', 'description',
+                         'ctaLabel', 'ctaAction', 'imageData', 'active', 'sortOrder', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(bannerId);
+    }
+
+    // --- 9. Skill Person Payments (Owner Submit/Read, Admin Verify/Approve/Manage) ---
+    match /payments/{paymentId} {
+      allow get: if isSignedIn() && isValidId(paymentId) &&
+                    (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() &&
+                     (existing().userId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(paymentId) &&
+                       isValidPayment(incoming()) &&
+                       incoming().paymentId == paymentId &&
+                       incoming().keys().hasAll([
+                         'paymentId', 'userId', 'providerName', 'providerPhone', 'categoryName',
+                         'planType', 'amountPkr', 'paymentMethod', 'transactionRef', 'billingPeriodMonths',
+                         'receiptNote', 'receiptImageData', 'status', 'isRenewal', 'adminRemarks',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'paymentId', 'userId', 'providerName', 'providerPhone', 'categoryName',
+                         'planType', 'amountPkr', 'paymentMethod', 'transactionRef', 'billingPeriodMonths',
+                         'receiptNote', 'receiptImageData', 'status', 'isRenewal', 'adminRemarks',
+                         'reviewedBy', 'createdAt', 'updatedAt'
+                       ]) &&
+                       (
+                         isAdmin() ||
+                         (
+                           incoming().userId == request.auth.uid &&
+                           incoming().status == 'PENDING' &&
+                           incoming().adminRemarks == ''
+                         )
+                       );
+
+      allow update: if isAdmin() &&
+                       isValidId(paymentId) &&
+                       isValidPayment(incoming()) &&
+                       incoming().paymentId == existing().paymentId &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'status', 'adminRemarks', 'reviewedBy', 'planType', 'amountPkr',
+                         'billingPeriodMonths', 'isRenewal', 'receiptNote', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(paymentId);
+    }
+
+    // --- 10. Skill Person Subscriptions & Old Account Renewals ---
+    match /provider_subscriptions/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) &&
+                    (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() &&
+                     (request.auth.uid == userId || isBootstrappedAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidProviderSubscription(incoming()) &&
+                       incoming().userId == userId &&
+                       incoming().keys().hasAll([
+                         'userId', 'providerName', 'providerPhone', 'tier', 'renewalStatus',
+                         'renewalExpiresAtMillis', 'lastPaymentId', 'lastPaymentAmount',
+                         'approvedByAdmin', 'adminRemarks', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'providerName', 'providerPhone', 'tier', 'renewalStatus',
+                         'renewalExpiresAtMillis', 'lastPaymentId', 'lastPaymentAmount',
+                         'approvedByAdmin', 'adminRemarks', 'createdAt', 'updatedAt'
+                       ]) &&
+                       (
+                         isAdmin() ||
+                         (
+                           request.auth.uid == userId &&
+                           incoming().tier == 'FREE' &&
+                           incoming().approvedByAdmin == false &&
+                           incoming().renewalStatus in ['ACTIVE', 'RENEWAL_PENDING']
+                         )
+                       );
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidProviderSubscription(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         isAdmin() ||
+                         (
+                           request.auth.uid == userId &&
+                           incoming().tier == existing().tier &&
+                           incoming().approvedByAdmin == false &&
+                           incoming().renewalStatus == 'RENEWAL_PENDING' &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'renewalStatus', 'lastPaymentId', 'lastPaymentAmount', 'approvedByAdmin', 'updatedAt'
+                           ])
+                         )
+                       );
+
+      allow delete: if isAdmin() && isValidId(userId);
     }
   }
 }

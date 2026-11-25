@@ -372,3 +372,159 @@ test("Booking, private chat, atomic review, and Super Admin complaint moderation
   });
   await assertSucceeds(reviewBatch.commit());
 });
+
+test("Admin manages Home/Category banners, verifies Skill Person payments, and approves old-account renewals while non-admins are blocked from self-approving", async () => {
+  const techDb = testEnv.authenticatedContext(TECH_UID).firestore();
+  const otherDb = testEnv.authenticatedContext(OTHER_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID, {
+    email: "orionfxservis@gmail.com",
+    email_verified: true,
+  }).firestore();
+  const ts = pastDate(2000);
+
+  // Non-admin cannot create banner; Admin can create HOME & CATEGORY banners; public can read active ones
+  await assertFails(
+    techDb.collection("banners").doc("b_home_1").set({
+      bannerId: "b_home_1",
+      placement: "HOME",
+      categoryId: "all",
+      eyebrow: "Promo",
+      headline: "Rogue Banner",
+      description: "Unauthorized",
+      ctaLabel: "Go",
+      ctaAction: "explore",
+      imageData: "assets/images/mobile/img_hero_technician.jpg",
+      active: true,
+      sortOrder: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  await assertSucceeds(
+    adminDb.collection("banners").doc("b_home_1").set({
+      bannerId: "b_home_1",
+      placement: "HOME",
+      categoryId: "all",
+      eyebrow: "Featured",
+      headline: "Skilled Help. Just a Tap Away!",
+      description: "Find verified professionals near your location",
+      ctaLabel: "Explore Now",
+      ctaAction: "explore",
+      imageData: "assets/images/mobile/img_hero_technician.jpg",
+      active: true,
+      sortOrder: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("banners").doc("b_cat_1").set({
+      bannerId: "b_cat_1",
+      placement: "CATEGORY",
+      categoryId: "electrician",
+      eyebrow: "Need a Home Repair?",
+      headline: "Your Home, Our Professionals.",
+      description: "Certified electricians ready near you.",
+      ctaLabel: "Find a Professional",
+      ctaAction: "find_pro",
+      imageData: "assets/images/mobile/img_cat_slide_2.jpg",
+      active: true,
+      sortOrder: 1,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(otherDb.collection("banners").where("active", "==", true).get());
+
+  // Skill Person submits PENDING renewal payment, cannot self-approve; other user cannot read; Admin approves payment + renewal
+  await assertFails(
+    techDb.collection("payments").doc("pay_self_approve").set({
+      paymentId: "pay_self_approve",
+      userId: TECH_UID,
+      providerName: "Bob Electrical",
+      providerPhone: "+923001234567",
+      categoryName: "Electrician",
+      planType: "PRO_RENEWAL",
+      amountPkr: 499,
+      paymentMethod: "JazzCash",
+      transactionRef: "JC-998877",
+      billingPeriodMonths: 1,
+      receiptNote: "Renewal payment",
+      receiptImageData: "",
+      status: "APPROVED",
+      isRenewal: true,
+      adminRemarks: "",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  await assertSucceeds(
+    techDb.collection("payments").doc("pay_001").set({
+      paymentId: "pay_001",
+      userId: TECH_UID,
+      providerName: "Bob Electrical",
+      providerPhone: "+923001234567",
+      categoryName: "Electrician",
+      planType: "PRO_RENEWAL",
+      amountPkr: 499,
+      paymentMethod: "JazzCash",
+      transactionRef: "JC-998877",
+      billingPeriodMonths: 1,
+      receiptNote: "Paid via JazzCash for monthly renewal",
+      receiptImageData: "",
+      status: "PENDING",
+      isRenewal: true,
+      adminRemarks: "",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertFails(otherDb.collection("payments").doc("pay_001").get());
+
+  await assertSucceeds(
+    adminDb.collection("payments").doc("pay_001").update({
+      status: "APPROVED",
+      adminRemarks: "Verified JazzCash receipt",
+      reviewedBy: "orionfxservis@gmail.com",
+      updatedAt: pastDate(1000),
+    })
+  );
+
+  // Admin approves old-account renewal subscription; non-admin cannot self-approve PRO
+  await assertFails(
+    techDb.collection("provider_subscriptions").doc(TECH_UID).set({
+      userId: TECH_UID,
+      providerName: "Bob Electrical",
+      providerPhone: "+923001234567",
+      tier: "PRO",
+      renewalStatus: "ACTIVE",
+      renewalExpiresAtMillis: Date.now() + 86400000 * 30,
+      lastPaymentId: "pay_001",
+      lastPaymentAmount: 499,
+      approvedByAdmin: true,
+      adminRemarks: "",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  await assertSucceeds(
+    adminDb.collection("provider_subscriptions").doc(TECH_UID).set({
+      userId: TECH_UID,
+      providerName: "Bob Electrical",
+      providerPhone: "+923001234567",
+      tier: "PRO",
+      renewalStatus: "ACTIVE",
+      renewalExpiresAtMillis: Date.now() + 86400000 * 30,
+      lastPaymentId: "pay_001",
+      lastPaymentAmount: 499,
+      approvedByAdmin: true,
+      adminRemarks: "Old account renewal approved",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+});
+

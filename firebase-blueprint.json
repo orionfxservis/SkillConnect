@@ -206,6 +206,85 @@
         "bookingId", "reporterId", "reporterName", "reportedTechId", "reportedTechName",
         "reason", "description", "status", "adminResolution", "createdAt", "updatedAt"
       ]
+    },
+    "PromoBanner": {
+      "title": "PromoBanner",
+      "description": "Web-Admin managed promotional banners for Main Page and Category Pages.",
+      "type": "object",
+      "properties": {
+        "bannerId": { "type": "string" },
+        "placement": { "type": "string", "enum": ["HOME", "CATEGORY"] },
+        "categoryId": { "type": "string" },
+        "eyebrow": { "type": "string" },
+        "headline": { "type": "string" },
+        "description": { "type": "string" },
+        "ctaLabel": { "type": "string" },
+        "ctaAction": { "type": "string" },
+        "imageData": { "type": "string" },
+        "active": { "type": "boolean" },
+        "sortOrder": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "bannerId", "placement", "categoryId", "eyebrow", "headline", "description",
+        "ctaLabel", "ctaAction", "imageData", "active", "sortOrder", "createdAt", "updatedAt"
+      ]
+    },
+    "SkillPersonPayment": {
+      "title": "SkillPersonPayment",
+      "description": "Subscription and renewal payments received from Skill Persons and verified by Admin.",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "providerName": { "type": "string" },
+        "providerPhone": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "planType": { "type": "string", "enum": ["PRO_NEW", "PRO_RENEWAL", "FEATURED", "OTHER"] },
+        "amountPkr": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["JazzCash", "EasyPaisa", "Bank Transfer", "Cash", "Google Play"] },
+        "transactionRef": { "type": "string" },
+        "billingPeriodMonths": { "type": "integer" },
+        "receiptNote": { "type": "string" },
+        "receiptImageData": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED", "REFUNDED"] },
+        "isRenewal": { "type": "boolean" },
+        "adminRemarks": { "type": "string" },
+        "reviewedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "paymentId", "userId", "providerName", "providerPhone", "categoryName",
+        "planType", "amountPkr", "paymentMethod", "transactionRef", "billingPeriodMonths",
+        "receiptNote", "receiptImageData", "status", "isRenewal", "adminRemarks",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "ProviderSubscriptionRecord": {
+      "title": "ProviderSubscriptionRecord",
+      "description": "Skill Person subscription tier and old-account renewal approval tracking.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "providerName": { "type": "string" },
+        "providerPhone": { "type": "string" },
+        "tier": { "type": "string", "enum": ["FREE", "PRO"] },
+        "renewalStatus": { "type": "string", "enum": ["ACTIVE", "RENEWAL_PENDING", "EXPIRED", "SUSPENDED"] },
+        "renewalExpiresAtMillis": { "type": "integer" },
+        "lastPaymentId": { "type": "string" },
+        "lastPaymentAmount": { "type": "number" },
+        "approvedByAdmin": { "type": "boolean" },
+        "adminRemarks": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "providerName", "providerPhone", "tier", "renewalStatus",
+        "renewalExpiresAtMillis", "lastPaymentId", "lastPaymentAmount",
+        "approvedByAdmin", "adminRemarks", "createdAt", "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -240,6 +319,18 @@
     "/complaints/{complaintId}": {
       "schema": { "$ref": "ServiceComplaint" },
       "description": "Customer/provider complaints moderated by Super Admin."
+    },
+    "/banners/{bannerId}": {
+      "schema": { "$ref": "PromoBanner" },
+      "description": "Main page and category page promotional banners managed by Admin."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "SkillPersonPayment" },
+      "description": "Skill Person subscription and renewal payments managed by Admin."
+    },
+    "/provider_subscriptions/{userId}": {
+      "schema": { "$ref": "ProviderSubscriptionRecord" },
+      "description": "Skill Person Pro plans and old-account renewal approval states."
     }
   }
 }
