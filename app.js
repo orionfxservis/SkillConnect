@@ -7,6 +7,7 @@
 import {
   ADMIN_EMAIL,
   isAdminUser,
+  refreshAdminSession,
   subscribeAuthState,
   signInAdminWithGoogle,
   signInAdminWithEmailPassword,
@@ -951,16 +952,25 @@ function startPublicListeners() {
 
 function startAdminListeners() {
   stopLiveListeners();
+  const syncErrors = new Set();
+  const markSynced = (colName) => {
+    if (syncErrors.delete(colName) && syncErrors.size === 0) {
+      hideNotice();
+    }
+  };
   state.liveUnsubAdmin = subscribeAdminWorkspace({
     onUsers: (docs) => {
+      markSynced('users');
       state.liveCollections.users = docs;
       renderAll();
     },
     onTechnicians: (docs) => {
+      markSynced('technicians');
       state.liveCollections.technicians = docs;
       renderAll();
     },
     onCategories: (docs) => {
+      markSynced('categories');
       if (docs.length) {
         state.liveCollections.categories = docs.map((d) => ({
           ...d,
@@ -972,27 +982,51 @@ function startAdminListeners() {
       renderAll();
     },
     onBookings: (docs) => {
+      markSynced('bookings');
       state.liveCollections.bookings = docs;
       renderAll();
     },
     onComplaints: (docs) => {
+      markSynced('complaints');
       state.liveCollections.complaints = docs;
       renderAll();
     },
     onBanners: (docs) => {
+      markSynced('banners');
       state.liveCollections.banners = docs;
       renderAll();
     },
     onPayments: (docs) => {
+      markSynced('payments');
       state.liveCollections.payments = docs;
       renderAll();
     },
     onSubscriptions: (docs) => {
+      markSynced('provider_subscriptions');
       state.liveCollections.subscriptions = docs;
       renderAll();
     },
     onError: (col, err) => {
-      showNotice(`Firestore sync warning on <strong>${esc(col)}</strong>: ${esc(err.message)}`, true);
+      syncErrors.add(col);
+      const list = Array.from(syncErrors).map((c) => `<strong>${esc(c)}</strong>`).join(', ');
+      showNotice(
+        `<span>Firestore sync warning on ${list}: ${esc(err.message)}</span>
+         <button type="button" class="btn btn-outline btn-sm" id="retryAdminSyncBtn">Refresh Token &amp; Retry</button>`,
+        true
+      );
+      document.getElementById('retryAdminSyncBtn')?.addEventListener('click', async () => {
+        const refreshed = await refreshAdminSession();
+        state.authUser = refreshed;
+        state.isLiveAdmin = isAdminUser(refreshed);
+        updateAuthUi();
+        if (state.isLiveAdmin) {
+          hideNotice();
+          startAdminListeners();
+          showToast('Admin session refreshed');
+        } else {
+          showToast('Please verify email or re-sign in with admin-skillconnect@orionfx.net');
+        }
+      });
     }
   });
 }
@@ -1003,6 +1037,7 @@ function initFirebaseAuth() {
     state.isLiveAdmin = isAdminUser(user);
 
     if (state.isLiveAdmin) {
+      hideNotice();
       startAdminListeners();
       showToast('Connected as Live Firebase Admin');
     } else {
@@ -1023,11 +1058,28 @@ function initFirebaseAuth() {
         if (isUnverifiedAdminEmail) {
           showNotice(
             `<span>Signed in as <strong>${esc(user.email)}</strong>, but email verification is pending. Verify your email so Firestore Admin rules unlock.</span>
-             <button type="button" class="btn btn-outline btn-sm" id="sendAdminVerifyBtn">Send Verification Email</button>`
+             <div style="display:flex;gap:8px;flex-wrap:wrap;">
+               <button type="button" class="btn btn-outline btn-sm" id="sendAdminVerifyBtn">Send Verification Email</button>
+               <button type="button" class="btn btn-primary btn-sm" id="refreshVerifyStateBtn">I've Verified — Refresh</button>
+             </div>`
           );
           document.getElementById('sendAdminVerifyBtn')?.addEventListener('click', async () => {
             await sendAdminVerificationEmail(user);
             showToast(`Verification link sent to ${user.email}`);
+          });
+          document.getElementById('refreshVerifyStateBtn')?.addEventListener('click', async () => {
+            const refreshed = await refreshAdminSession();
+            state.authUser = refreshed;
+            state.isLiveAdmin = isAdminUser(refreshed);
+            updateAuthUi();
+            if (state.isLiveAdmin) {
+              hideNotice();
+              startAdminListeners();
+              renderAll();
+              showToast('Connected as Live Firebase Admin');
+            } else {
+              showToast('Email verification not confirmed yet. Click the link in your inbox first.');
+            }
           });
         } else {
           showNotice(

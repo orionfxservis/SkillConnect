@@ -17,7 +17,8 @@ service cloud.firestore {
              'email_verified' in request.auth.token &&
              request.auth.token.email_verified == true &&
              'email' in request.auth.token &&
-             request.auth.token.email == 'admin-skillconnect@orionfx.net';
+             request.auth.token.email is string &&
+             request.auth.token.email.lower() == 'admin-skillconnect@orionfx.net';
     }
 
     // Use isAdmin() only in single-document get/create/update/delete; use isBootstrappedAdmin() in allow list
@@ -232,7 +233,7 @@ service cloud.firestore {
     // --- 1. Private User Profiles ---
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow list: if isSignedIn() && (request.auth.uid == userId || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() || (isSignedIn() && request.auth.uid == userId);
 
       allow create: if isSignedIn() &&
                        isValidId(userId) &&
@@ -281,7 +282,7 @@ service cloud.firestore {
     // --- 2. Service Categories & Subcategories (Public Read, Admin Write) ---
     match /categories/{categoryId} {
       allow get: if isValidId(categoryId) && (existing().active == true || isAdmin());
-      allow list: if existing().active == true || isBootstrappedAdmin();
+      allow list: if isBootstrappedAdmin() || existing().active == true;
 
       allow create: if isAdmin() &&
                        isValidId(categoryId) &&
@@ -315,7 +316,7 @@ service cloud.firestore {
                      (isSignedIn() && request.auth.uid == techId) ||
                      isAdmin());
 
-      allow list: if existing().listed == true || isBootstrappedAdmin();
+      allow list: if isBootstrappedAdmin() || existing().listed == true;
 
       allow create: if isSignedIn() &&
                        isValidId(techId) &&
@@ -431,7 +432,7 @@ service cloud.firestore {
     // --- 4. PII-Isolated Provider CNIC Verification Docs ---
     match /provider_verifications/{techId} {
       allow get: if isSignedIn() && isValidId(techId) && (request.auth.uid == techId || isAdmin());
-      allow list: if isSignedIn() && (request.auth.uid == techId || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() || (isSignedIn() && request.auth.uid == techId);
 
       allow create: if isSignedIn() &&
                        isValidId(techId) &&
@@ -461,7 +462,7 @@ service cloud.firestore {
     // --- 5. Service Bookings & Private Dispatch Chat ---
     match /bookings/{bookingId} {
       allow get: if isSignedIn() && isValidId(bookingId) && (request.auth.uid in existing().participantIds || isAdmin());
-      allow list: if isSignedIn() && (request.auth.uid in existing().participantIds || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() || (isSignedIn() && request.auth.uid in existing().participantIds);
 
       allow create: if isSignedIn() &&
                        isValidId(bookingId) &&
@@ -534,7 +535,7 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow get: if isSignedIn() && isValidId(bookingId) && isValidId(messageId) &&
                       (request.auth.uid in existing().participantIds || isAdmin());
-        allow list: if isSignedIn() && (request.auth.uid in existing().participantIds || isBootstrappedAdmin());
+        allow list: if isBootstrappedAdmin() || (isSignedIn() && request.auth.uid in existing().participantIds);
 
         allow create: if isSignedIn() &&
                          isValidId(bookingId) &&
@@ -559,7 +560,7 @@ service cloud.firestore {
     // --- 6. Verified Service Reviews (Public Read of Approved Reviews, Auth Create) ---
     match /reviews/{reviewId} {
       allow get: if isValidId(reviewId) && (existing().approved == true || isAdmin());
-      allow list: if existing().approved == true || isBootstrappedAdmin();
+      allow list: if isBootstrappedAdmin() || existing().approved == true;
 
       allow create: if isSignedIn() &&
                        isValidId(reviewId) &&
@@ -592,9 +593,8 @@ service cloud.firestore {
         existing().reportedTechId == request.auth.uid ||
         isAdmin()
       );
-      allow list: if isSignedIn() && (
-        existing().reporterId == request.auth.uid ||
-        isBootstrappedAdmin()
+      allow list: if isBootstrappedAdmin() || (
+        isSignedIn() && existing().reporterId == request.auth.uid
       );
 
       allow create: if isSignedIn() &&
@@ -633,7 +633,7 @@ service cloud.firestore {
     // --- 8. Promotional Banners (Public Read of Active Banners, Admin Write) ---
     match /banners/{bannerId} {
       allow get: if isValidId(bannerId) && (existing().active == true || isAdmin());
-      allow list: if existing().active == true || isBootstrappedAdmin();
+      allow list: if isBootstrappedAdmin() || existing().active == true;
 
       allow create: if isAdmin() &&
                        isValidId(bannerId) &&
@@ -665,8 +665,8 @@ service cloud.firestore {
     match /payments/{paymentId} {
       allow get: if isSignedIn() && isValidId(paymentId) &&
                     (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() &&
-                     (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() ||
+                     (isSignedIn() && existing().userId == request.auth.uid);
 
       allow create: if isSignedIn() &&
                        isValidId(paymentId) &&
@@ -711,8 +711,8 @@ service cloud.firestore {
     match /provider_subscriptions/{userId} {
       allow get: if isSignedIn() && isValidId(userId) &&
                     (request.auth.uid == userId || isAdmin());
-      allow list: if isSignedIn() &&
-                     (request.auth.uid == userId || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin() ||
+                     (isSignedIn() && request.auth.uid == userId);
 
       allow create: if isSignedIn() &&
                        isValidId(userId) &&

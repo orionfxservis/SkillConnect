@@ -547,3 +547,25 @@ test("Admin manages Home/Category banners, verifies Skill Person payments, and a
   );
 });
 
+test("Verified admin-skillconnect@orionfx.net can list all 8 Admin Console collections while non-admin cannot list users", async () => {
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID, {
+    email: "admin-skillconnect@orionfx.net",
+    email_verified: true,
+  }).firestore();
+  const nonAdminDb = testEnv.authenticatedContext(CLIENT_UID, {
+    email: "orionfxservis@gmail.com",
+    email_verified: true,
+  }).firestore();
+
+  await assertFails(nonAdminDb.collection("users").get());
+  await assertSucceeds(adminDb.collection("users").get());
+  await assertSucceeds(adminDb.collection("technicians").get());
+  await assertSucceeds(adminDb.collection("categories").get());
+  await assertSucceeds(adminDb.collection("bookings").get());
+  await assertSucceeds(adminDb.collection("complaints").get());
+  await assertSucceeds(adminDb.collection("banners").get());
+  await assertSucceeds(adminDb.collection("payments").get());
+  await assertSucceeds(adminDb.collection("provider_subscriptions").get());
+});
+
+

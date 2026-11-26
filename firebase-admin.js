@@ -56,18 +56,48 @@ export function isAdminUser(user) {
   );
 }
 
+export async function refreshAdminSession() {
+  const user = auth.currentUser;
+  if (!user) return null;
+  try {
+    await user.reload();
+  } catch (_) {
+    // Ignore reload failures when offline
+  }
+  try {
+    await user.getIdToken(true);
+  } catch (_) {
+    // Ignore token refresh failures when offline
+  }
+  return auth.currentUser;
+}
+
 export function subscribeAuthState(callback) {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(auth, async (user) => {
+    if (user && String(user.email || '').toLowerCase() === ADMIN_EMAIL) {
+      try {
+        await user.reload();
+        await user.getIdToken(true);
+      } catch (_) {
+        // Proceed with cached user if network refresh fails
+      }
+      callback(auth.currentUser || user);
+      return;
+    }
+    callback(user);
+  });
 }
 
 export async function signInAdminWithGoogle() {
   const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
+  await refreshAdminSession();
+  return auth.currentUser || result.user;
 }
 
 export async function signInAdminWithEmailPassword(email, password) {
   const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-  return result.user;
+  await refreshAdminSession();
+  return auth.currentUser || result.user;
 }
 
 export async function sendAdminVerificationEmail(user) {
