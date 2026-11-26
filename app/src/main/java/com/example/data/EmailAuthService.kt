@@ -192,16 +192,32 @@ object EmailAuthService {
     }
   }
 
+  suspend fun sendPasswordReset(email: String): EmailAuthResult {
+    val cleanEmail = email.trim()
+    if (!isValidEmail(cleanEmail)) {
+      return EmailAuthResult.Error("Enter your email address above first, then tap Forgot / Set Password.")
+    }
+    return try {
+      Firebase.auth.sendPasswordResetEmail(cleanEmail).await()
+      EmailAuthResult.Success
+    } catch (e: FirebaseAuthException) {
+      EmailAuthResult.Error(mapFirebaseAuthError(e))
+    } catch (e: Exception) {
+      EmailAuthResult.Error(e.localizedMessage ?: "Failed to send password setup email.")
+    }
+  }
+
   private fun mapFirebaseAuthError(e: FirebaseAuthException): String =
     when (e.errorCode) {
       "ERROR_OPERATION_NOT_ALLOWED",
       "CONFIGURATION_NOT_FOUND" ->
         "Email/Password login is not enabled in Firebase Authentication yet. Enable Email/Password in Firebase Console → Authentication → Sign-in method."
       "ERROR_EMAIL_ALREADY_IN_USE" ->
-        "An account with this email already exists. Switch to the Login tab above to sign in."
+        "An account with this email already exists. Use the Login tab, tap Continue with Google, or tap Forgot / Set Password."
       "ERROR_WRONG_PASSWORD",
       "ERROR_INVALID_CREDENTIAL",
-      "ERROR_USER_NOT_FOUND" -> "Incorrect email or password. Please check and try again."
+      "ERROR_USER_NOT_FOUND" ->
+        "Incorrect email or password, or this account uses Google Sign-In. Tap \"Continue with Google\" below or \"Forgot / Set Password?\" to link an app password."
       "ERROR_WEAK_PASSWORD" -> "Please choose a stronger password (at least 6 characters)."
       else -> e.localizedMessage ?: "Authentication error (${e.errorCode})."
     }

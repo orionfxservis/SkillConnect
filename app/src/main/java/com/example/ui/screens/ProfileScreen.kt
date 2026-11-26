@@ -279,7 +279,10 @@ fun ProfileScreen(
 
       if (!isSignedIn) {
         Box(modifier = Modifier.bringIntoViewRequester(authCardBringIntoView)) {
-          GuestAuthStepperCard(categories = categories)
+          GuestAuthStepperCard(
+            categories = categories,
+            onSignInWithGoogle = onSignInWithGoogle,
+          )
         }
       }
 

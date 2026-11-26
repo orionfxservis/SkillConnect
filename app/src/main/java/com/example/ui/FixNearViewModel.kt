@@ -912,6 +912,6 @@ class FixNearViewModel(
 
   private companion object {
     const val TAG = "FixNearVM"
-    const val SUPER_ADMIN_EMAIL = "orionfxservis@gmail.com"
+    const val SUPER_ADMIN_EMAIL = "admin-skillconnect@orionfx.net"
   }
 }

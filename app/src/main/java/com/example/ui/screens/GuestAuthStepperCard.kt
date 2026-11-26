@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -33,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,6 +74,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun GuestAuthStepperCard(
   categories: List<ServiceCategory> = ServiceCategories.defaults,
+  onSignInWithGoogle: () -> Unit = {},
 ) {
   val themeGreen = MaterialTheme.colorScheme.primary
   val pillTrackColor = MaterialTheme.colorScheme.surfaceVariant
@@ -608,7 +611,11 @@ fun GuestAuthStepperCard(
             },
             placeholder = { Text("you@gmail.com") },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            keyboardOptions =
+              KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                autoCorrectEnabled = false,
+              ),
             shape = RoundedCornerShape(14.dp),
             colors = blueLoginColors,
             modifier = Modifier.fillMaxWidth().testTag("auth_login_email_input"),
@@ -640,11 +647,49 @@ fun GuestAuthStepperCard(
                 )
               }
             },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            keyboardOptions =
+              KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                autoCorrectEnabled = false,
+              ),
             shape = RoundedCornerShape(14.dp),
             colors = blueLoginColors,
             modifier = Modifier.fillMaxWidth().testTag("auth_login_password_input"),
           )
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+          ) {
+            TextButton(
+              onClick = {
+                resetMessages()
+                isSubmitting = true
+                scope.launch {
+                  when (val result = EmailAuthService.sendPasswordReset(emailInput)) {
+                    is EmailAuthResult.Success -> {
+                      statusMessage =
+                        "Password setup/reset link sent to ${emailInput.trim()}. Check your inbox (and spam), set a password, then sign in."
+                      isErrorBanner = false
+                    }
+                    is EmailAuthResult.Error -> {
+                      statusMessage = result.message
+                      isErrorBanner = true
+                    }
+                  }
+                  isSubmitting = false
+                }
+              },
+              enabled = !isSubmitting,
+              modifier = Modifier.testTag("auth_forgot_password_button"),
+            ) {
+              Text(
+                text = "Forgot / Set Password?",
+                color = themeGreen,
+                fontWeight = FontWeight.Medium,
+              )
+            }
+          }
 
           Button(
             onClick = {
@@ -684,6 +729,47 @@ fun GuestAuthStepperCard(
             }
           }
         }
+      }
+
+      Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        HorizontalDivider(
+          color = MaterialTheme.colorScheme.outlineVariant,
+          modifier = Modifier.weight(1f),
+        )
+        Text(
+          text = "OR",
+          style = MaterialTheme.typography.labelSmall,
+          color = inactiveText,
+          modifier = Modifier.padding(horizontal = 10.dp),
+        )
+        HorizontalDivider(
+          color = MaterialTheme.colorScheme.outlineVariant,
+          modifier = Modifier.weight(1f),
+        )
+      }
+
+      OutlinedButton(
+        onClick = onSignInWithGoogle,
+        enabled = !isSubmitting,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.fillMaxWidth().height(48.dp).testTag("auth_google_signin_button"),
+      ) {
+        Icon(
+          imageVector = Icons.Rounded.AccountCircle,
+          contentDescription = "Google Sign-In",
+          tint = themeGreen,
+          modifier = Modifier.size(20.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+          text = "Continue with Google",
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onSurface,
+        )
       }
     }
   }
