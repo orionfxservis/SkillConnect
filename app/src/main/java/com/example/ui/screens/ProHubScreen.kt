@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.model.Coordinates
 import com.example.model.ProviderVerificationDoc
+import com.example.model.ServiceCategories
 import com.example.model.ServiceCategory
 import com.example.model.TechnicianProfile
 import com.example.model.TechnicianRegistrationInput
@@ -190,6 +191,53 @@ fun ProHubScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
               ) {
+                val activeGroup = ServiceCategories.byId(existingTech.categoryId, categories)
+                val activeSub =
+                  existingTech.subcategory.takeIf { it.isNotBlank() }
+                    ?: ServiceCategories.legacySubcategoryForId(existingTech.categoryId)
+                    ?: activeGroup.subcategories.firstOrNull().orEmpty()
+                Surface(
+                  shape = RoundedCornerShape(12.dp),
+                  color = MaterialTheme.colorScheme.surface,
+                  border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                  modifier = Modifier.fillMaxWidth().testTag("pro_hub_active_category_banner"),
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  ) {
+                    Box(
+                      modifier =
+                        Modifier.size(34.dp)
+                          .clip(RoundedCornerShape(9.dp))
+                          .background(activeGroup.containerBg),
+                      contentAlignment = Alignment.Center,
+                    ) {
+                      Icon(
+                        imageVector = activeGroup.icon,
+                        contentDescription = activeGroup.name,
+                        tint = activeGroup.tint,
+                        modifier = Modifier.size(19.dp),
+                      )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = activeGroup.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                      )
+                      if (activeSub.isNotBlank()) {
+                        Text(
+                          text = "Specialty: $activeSub",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                      }
+                    }
+                  }
+                }
+
                 Row(
                   modifier = Modifier.fillMaxWidth(),
                   horizontalArrangement = Arrangement.SpaceBetween,

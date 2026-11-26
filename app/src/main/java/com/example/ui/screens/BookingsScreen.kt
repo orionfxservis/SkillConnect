@@ -50,6 +50,7 @@ import com.example.model.BookingStatus
 import com.example.model.ProviderSubscriptionStatus
 import com.example.model.ServiceBooking
 import com.example.model.ServiceCategories
+import com.example.model.SubscriptionFeatureFlags
 import com.example.model.SubscriptionTier
 import com.example.model.UiState
 import com.example.ui.theme.AmberContainer
@@ -159,14 +160,17 @@ fun BookingsScreen(
 
         if (selectedTab == 1) {
           Spacer(modifier = Modifier.height(10.dp))
-          val isPro = subscriptionStatus.tier == SubscriptionTier.PRO
+          val isPro =
+            SubscriptionFeatureFlags.PRO_PLAN_ENABLED &&
+              subscriptionStatus.tier == SubscriptionTier.PRO
+          val hasLimit = subscriptionStatus.tier.monthlyConfirmedLimit != null
           val limitReached = !subscriptionStatus.canConfirmAnotherBooking
           Surface(
             onClick = onOpenSubscription,
             shape = RoundedCornerShape(12.dp),
             color =
               when {
-                isPro -> EmeraldContainer.copy(alpha = 0.7f)
+                isPro || !hasLimit -> EmeraldContainer.copy(alpha = 0.7f)
                 limitReached -> AmberContainer
                 else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
               },
@@ -181,28 +185,45 @@ fun BookingsScreen(
               Column(modifier = Modifier.weight(1f)) {
                 Text(
                   text =
-                    if (isPro) "Pro Plan • Unlimited bookings active"
-                    else if (limitReached) "Free Plan Limit Reached (5/5 confirmed)"
-                    else "Free Plan • ${subscriptionStatus.confirmedThisMonth}/5 confirmed • ${subscriptionStatus.requestsThisMonth}/5 requests",
+                    when {
+                      isPro -> "Pro Plan • Unlimited bookings active"
+                      !hasLimit ->
+                        "Free Plan • Unlimited bookings active"
+                      limitReached ->
+                        "Free Plan Limit Reached (5/5 confirmed)"
+                      else ->
+                        "Free Plan • ${subscriptionStatus.confirmedThisMonth}/5 confirmed • ${subscriptionStatus.requestsThisMonth}/5 requests"
+                    },
                   style = MaterialTheme.typography.labelMedium,
                   color =
                     when {
-                      isPro -> OnEmeraldContainer
+                      isPro || !hasLimit -> OnEmeraldContainer
                       limitReached -> OnAmberContainer
                       else -> MaterialTheme.colorScheme.onSurface
                     },
                 )
                 Text(
                   text =
-                    if (isPro) "Booking history available • Subscription renewal active"
-                    else "Automatic reset on ${subscriptionStatus.nextResetDateLabel} • Tap for Pro (Rs. 499/mo)",
+                    when {
+                      isPro ->
+                        "Booking history available • Subscription renewal active"
+                      !hasLimit ->
+                        "${subscriptionStatus.confirmedThisMonth} confirmed this month • ${subscriptionStatus.totalHistoryCount} total recorded"
+                      else ->
+                        "Automatic reset on ${subscriptionStatus.nextResetDateLabel} • Tap for Pro (Rs. 499/mo)"
+                    },
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
               }
               Spacer(modifier = Modifier.width(8.dp))
               Text(
-                text = if (isPro) "Plans" else "Upgrade",
+                text =
+                  when {
+                    isPro -> "Plans"
+                    !hasLimit -> "Summary"
+                    else -> "Upgrade"
+                  },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
               )

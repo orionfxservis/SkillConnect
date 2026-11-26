@@ -115,11 +115,20 @@ fun ProWizardStep1Personal(
       readOnly = true,
       label = { Text("Service Category *") },
       leadingIcon = {
-        Icon(
-          imageVector = selectedCategory.icon,
-          contentDescription = null,
-          tint = selectedCategory.tint,
-        )
+        Box(
+          modifier =
+            Modifier.size(28.dp)
+              .clip(RoundedCornerShape(8.dp))
+              .background(selectedCategory.containerBg),
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(
+            imageVector = selectedCategory.icon,
+            contentDescription = null,
+            tint = selectedCategory.tint,
+            modifier = Modifier.size(18.dp),
+          )
+        }
       },
       trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
       singleLine = true,
@@ -137,23 +146,79 @@ fun ProWizardStep1Personal(
       categories.forEach { cat ->
         DropdownMenuItem(
           leadingIcon = {
-            Icon(
-              imageVector = cat.icon,
-              contentDescription = null,
-              tint = cat.tint,
-              modifier = Modifier.size(20.dp),
-            )
-          },
-          text = { Text(cat.name) },
-          onClick = {
-            state.categoryId = cat.id
-            state.additionalCategoryIds = state.additionalCategoryIds.filter { it != cat.id }
-            if (state.subcategory !in cat.subcategories) {
-              state.subcategory = cat.subcategories.firstOrNull() ?: ""
+            Box(
+              modifier =
+                Modifier.size(28.dp)
+                  .clip(RoundedCornerShape(8.dp))
+                  .background(cat.containerBg),
+              contentAlignment = Alignment.Center,
+            ) {
+              Icon(
+                imageVector = cat.icon,
+                contentDescription = null,
+                tint = cat.tint,
+                modifier = Modifier.size(17.dp),
+              )
             }
+          },
+          text = {
+            Column {
+              Text(cat.name, style = MaterialTheme.typography.bodyMedium)
+              Text(
+                text = "${cat.subcategories.size} services",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          },
+          onClick = {
+            state.selectCategory(cat)
             categoryExpanded = false
           },
           modifier = Modifier.testTag("enroll_cat_${cat.id}"),
+        )
+      }
+    }
+  }
+
+  val step1Subcategories =
+    remember(selectedCategory) {
+      selectedCategory.subcategories.ifEmpty { listOf("General ${selectedCategory.name}") }
+    }
+  var step1SubcategoryExpanded by remember { mutableStateOf(false) }
+  ExposedDropdownMenuBox(
+    expanded = step1SubcategoryExpanded,
+    onExpandedChange = { step1SubcategoryExpanded = !step1SubcategoryExpanded },
+  ) {
+    OutlinedTextField(
+      value = state.subcategory,
+      onValueChange = {},
+      readOnly = true,
+      label = { Text("Subcategory / Specialty *") },
+      placeholder = { Text("Select subcategory") },
+      trailingIcon = {
+        ExposedDropdownMenuDefaults.TrailingIcon(expanded = step1SubcategoryExpanded)
+      },
+      singleLine = true,
+      shape = RoundedCornerShape(12.dp),
+      colors = greenThemeTextFieldColors(highlighted = step1SubcategoryExpanded),
+      modifier =
+        Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
+          .fillMaxWidth()
+          .testTag("enroll_step1_subcategory_dropdown"),
+    )
+    ExposedDropdownMenu(
+      expanded = step1SubcategoryExpanded,
+      onDismissRequest = { step1SubcategoryExpanded = false },
+    ) {
+      step1Subcategories.forEach { sub ->
+        DropdownMenuItem(
+          text = { Text(sub) },
+          onClick = {
+            state.selectSubcategory(sub)
+            step1SubcategoryExpanded = false
+          },
+          modifier = Modifier.testTag("enroll_step1_sub_${sub.lowercase().replace(" ", "_")}"),
         )
       }
     }
@@ -424,20 +489,33 @@ fun ProWizardStep2Professional(
       categories.forEach { cat ->
         DropdownMenuItem(
           leadingIcon = {
-            Icon(
-              imageVector = cat.icon,
-              contentDescription = null,
-              tint = cat.tint,
-              modifier = Modifier.size(20.dp),
-            )
-          },
-          text = { Text(cat.name) },
-          onClick = {
-            state.categoryId = cat.id
-            state.additionalCategoryIds = state.additionalCategoryIds.filter { it != cat.id }
-            if (state.subcategory !in cat.subcategories) {
-              state.subcategory = cat.subcategories.firstOrNull() ?: ""
+            Box(
+              modifier =
+                Modifier.size(28.dp)
+                  .clip(RoundedCornerShape(8.dp))
+                  .background(cat.containerBg),
+              contentAlignment = Alignment.Center,
+            ) {
+              Icon(
+                imageVector = cat.icon,
+                contentDescription = null,
+                tint = cat.tint,
+                modifier = Modifier.size(17.dp),
+              )
             }
+          },
+          text = {
+            Column {
+              Text(cat.name, style = MaterialTheme.typography.bodyMedium)
+              Text(
+                text = "${cat.subcategories.size} services",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          },
+          onClick = {
+            state.selectCategory(cat)
             mainCategoryExpanded = false
           },
         )
@@ -503,7 +581,7 @@ fun ProWizardStep2Professional(
         DropdownMenuItem(
           text = { Text(sub) },
           onClick = {
-            state.subcategory = sub
+            state.selectSubcategory(sub)
             subcategoryExpanded = false
           },
           modifier = Modifier.testTag("enroll_sub_${sub.lowercase().replace(" ", "_")}"),

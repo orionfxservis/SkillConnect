@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.example.model.ProviderSubscriptionStatus
+import com.example.model.SubscriptionFeatureFlags
 import com.example.model.SubscriptionTier
 import com.example.ui.theme.AmberContainer
 import com.example.ui.theme.EmeraldContainer
@@ -119,6 +120,7 @@ fun MySubscriptionScreen(
             fontWeight = FontWeight.Bold,
           )
 
+          val freeUnlimited = SubscriptionTier.FREE.monthlyConfirmedLimit == null
           ServicePlanCard(
             planName = "Free",
             badgeLabel =
@@ -126,26 +128,38 @@ fun MySubscriptionScreen(
               else "Get Started",
             priceAmount = "Rs. 0",
             priceSuffix = "/ month",
-            subtitle = "Start receiving service bookings without a subscription fee.",
+            subtitle =
+              if (freeUnlimited) "Receive and record unlimited service bookings without a subscription fee."
+              else "Start receiving service bookings without a subscription fee.",
             includedHeading = "What's included",
             includedItems =
               listOf(
                 buildAnnotatedString {
-                  append("Up to ")
-                  withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append("5 confirmed bookings per month")
+                  if (freeUnlimited) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                      append("Unlimited confirmed service bookings")
+                    }
+                  } else {
+                    append("Up to ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                      append("5 confirmed bookings per month")
+                    }
                   }
                 },
+                AnnotatedString("Full booking history & automatic recording"),
                 AnnotatedString("Professional profile listing"),
                 AnnotatedString("Receive customer booking requests"),
                 AnnotatedString("Accept or reject bookings"),
-                AnnotatedString("Manage booking status"),
                 AnnotatedString("Customer contact details"),
               ),
-            footerPillText = "5 bookings reset every month",
+            footerPillText =
+              if (freeUnlimited) "Unlimited free bookings active"
+              else "5 bookings reset every month",
             isActive = isSignedIn && status.tier == SubscriptionTier.FREE,
             isProHighlight = false,
-            buttonLabel = "Start Free",
+            buttonLabel =
+              if (isSignedIn && status.tier == SubscriptionTier.FREE) "Active Free Plan"
+              else "Start Free",
             buttonEnabled = !isSignedIn || status.tier != SubscriptionTier.FREE,
             onActionClick = {
               if (!isSignedIn) {
@@ -157,46 +171,48 @@ fun MySubscriptionScreen(
             testTag = "plan_free_action_button",
           )
 
-          ServicePlanCard(
-            planName = "SkillConnect Pro",
-            badgeLabel =
-              if (isSignedIn && status.tier == SubscriptionTier.PRO) "Most Popular • Active"
-              else "Most Popular",
-            priceAmount = "Rs. 499",
-            priceSuffix = "/ month",
-            subtitle = "Grow your service business with unlimited bookings.",
-            includedHeading = "Everything in Free, plus",
-            includedItems =
-              listOf(
-                buildAnnotatedString {
-                  withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append("Unlimited service bookings")
-                  }
-                },
-                AnnotatedString("Receive unlimited booking requests"),
-                AnnotatedString("Accept or reject bookings"),
-                AnnotatedString("Manage all customer bookings"),
-                AnnotatedString("Full booking history"),
-                AnnotatedString("No monthly booking limit"),
-              ),
-            footerPillText = "Unlimited bookings while subscription is active",
-            isActive = isSignedIn && status.tier == SubscriptionTier.PRO,
-            isProHighlight = true,
-            buttonLabel =
-              if (isSignedIn && status.tier == SubscriptionTier.PRO) "Renew Pro"
-              else "Upgrade to Pro",
-            buttonEnabled = true,
-            onActionClick = {
-              if (!isSignedIn) {
-                onSignInPrompt()
-              } else if (status.tier == SubscriptionTier.PRO) {
-                pendingConfirmAction = SubscriptionConfirmAction.RENEW_PRO
-              } else {
-                pendingConfirmAction = SubscriptionConfirmAction.UPGRADE_PRO
-              }
-            },
-            testTag = "plan_pro_action_button",
-          )
+          if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) {
+            ServicePlanCard(
+              planName = "SkillConnect Pro",
+              badgeLabel =
+                if (isSignedIn && status.tier == SubscriptionTier.PRO) "Most Popular • Active"
+                else "Most Popular",
+              priceAmount = "Rs. 499",
+              priceSuffix = "/ month",
+              subtitle = "Grow your service business with unlimited bookings.",
+              includedHeading = "Everything in Free, plus",
+              includedItems =
+                listOf(
+                  buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                      append("Unlimited service bookings")
+                    }
+                  },
+                  AnnotatedString("Receive unlimited booking requests"),
+                  AnnotatedString("Accept or reject bookings"),
+                  AnnotatedString("Manage all customer bookings"),
+                  AnnotatedString("Full booking history"),
+                  AnnotatedString("No monthly booking limit"),
+                ),
+              footerPillText = "Unlimited bookings while subscription is active",
+              isActive = isSignedIn && status.tier == SubscriptionTier.PRO,
+              isProHighlight = true,
+              buttonLabel =
+                if (isSignedIn && status.tier == SubscriptionTier.PRO) "Renew Pro"
+                else "Upgrade to Pro",
+              buttonEnabled = true,
+              onActionClick = {
+                if (!isSignedIn) {
+                  onSignInPrompt()
+                } else if (status.tier == SubscriptionTier.PRO) {
+                  pendingConfirmAction = SubscriptionConfirmAction.RENEW_PRO
+                } else {
+                  pendingConfirmAction = SubscriptionConfirmAction.UPGRADE_PRO
+                }
+              },
+              testTag = "plan_pro_action_button",
+            )
+          }
         }
       }
     }
@@ -315,8 +331,8 @@ private fun CurrentPlanOverviewCard(
             )
             Text(
               text =
-                if (status.currentMonthLabel.isNotBlank()) "Billing & usage • ${status.currentMonthLabel}"
-                else "Simple monthly booking limits",
+                if (status.currentMonthLabel.isNotBlank()) "Booking record • ${status.currentMonthLabel}"
+                else "Monthly booking activity",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -375,10 +391,10 @@ private fun CurrentPlanOverviewCard(
         Column(modifier = Modifier.weight(1f)) {
           Text(
             text =
-              if (isPro) {
-                "Subscription renewal: ${status.proRenewalDateLabel ?: status.nextResetDateLabel}"
-              } else {
-                "Monthly renewal: Automatic reset (${status.nextResetDateLabel})"
+              when {
+                isPro -> "Subscription renewal: ${status.proRenewalDateLabel ?: status.nextResetDateLabel}"
+                status.tier.monthlyConfirmedLimit == null -> "Plan status: Free & Unlimited (all bookings recorded)"
+                else -> "Monthly renewal: Automatic reset (${status.nextResetDateLabel})"
               },
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
@@ -442,7 +458,7 @@ private fun QuotaProgressRow(
           modifier = Modifier.size(16.dp),
         )
         Text(
-          text = "Unlimited on Pro",
+          text = "Unlimited • Recorded automatically",
           style = MaterialTheme.typography.labelSmall,
           color = OnEmeraldContainer,
         )

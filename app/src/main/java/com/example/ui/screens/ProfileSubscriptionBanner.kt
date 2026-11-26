@@ -42,6 +42,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.ProviderSubscriptionStatus
+import com.example.model.SubscriptionFeatureFlags
 import com.example.model.SubscriptionTier
 import com.example.ui.theme.AmberContainer
 import com.example.ui.theme.DispatchAmber
@@ -56,7 +57,7 @@ fun ProfileSubscriptionBannerSection(
   onOpenSubscription: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  if (subscriptionStatus.tier == SubscriptionTier.PRO) {
+  if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED && subscriptionStatus.tier == SubscriptionTier.PRO) {
     ProPlanMembershipBannerCard(
       status = subscriptionStatus,
       onOpenSubscription = onOpenSubscription,
@@ -77,11 +78,9 @@ private fun FreePlanPromoBannerCard(
   onOpenSubscription: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val limit = status.tier.monthlyConfirmedLimit ?: 5
+  val limit = status.tier.monthlyConfirmedLimit
   val used = status.confirmedThisMonth.coerceAtLeast(0)
-  val remaining = (limit - used).coerceAtLeast(0)
-  val limitReached = used >= limit
-  val progress = (used.toFloat() / limit.toFloat()).coerceIn(0f, 1f)
+  val limitReached = limit != null && used >= limit
 
   Card(
     shape = RoundedCornerShape(20.dp),
@@ -148,128 +147,185 @@ private fun FreePlanPromoBannerCard(
         color = MaterialTheme.colorScheme.onSurface,
       )
 
-      if (limitReached) {
-        Surface(
-          shape = RoundedCornerShape(12.dp),
-          color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text(
-            text = "You've reached your monthly Free Plan limit. Upgrade to Pro for unlimited bookings.",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-          )
-        }
-      } else {
+      if (limit == null) {
         Text(
           text =
             buildAnnotatedString {
-              append("Enjoy up to ")
+              append("Enjoy ")
               withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                append("$limit confirmed service bookings per month")
+                append("unlimited service bookings")
               }
-              append(" with your Free Plan.")
+              append(" with your Free Plan. All bookings are automatically recorded.")
             },
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurface,
         )
-      }
 
-      LinearProgressIndicator(
-        progress = { progress },
-        color =
-          if (limitReached) MaterialTheme.colorScheme.error
-          else MaterialTheme.colorScheme.primary,
-        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-        strokeCap = StrokeCap.Round,
-        modifier =
-          Modifier.fillMaxWidth()
-            .height(8.dp)
-            .clip(RoundedCornerShape(50))
-            .testTag("free_plan_usage_progress"),
-      )
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = EmeraldContainer.copy(alpha = 0.72f),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+              Icon(
+                imageVector = Icons.Rounded.AllInclusive,
+                contentDescription = null,
+                tint = OnEmeraldContainer,
+                modifier = Modifier.size(18.dp),
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text =
+                  "$used confirmed this month • ${status.totalHistoryCount} total recorded",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = OnEmeraldContainer,
+                modifier = Modifier.testTag("free_plan_usage_text"),
+              )
+            }
+            Text(
+              text = "Unlimited",
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.testTag("free_plan_remaining_text"),
+            )
+          }
+        }
+      } else {
+        val remaining = (limit - used).coerceAtLeast(0)
+        val progress = (used.toFloat() / limit.toFloat()).coerceIn(0f, 1f)
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Text(
-          text = "$used of $limit bookings used",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.testTag("free_plan_usage_text"),
-        )
-        Text(
-          text = "$remaining bookings remaining",
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.SemiBold,
+        if (limitReached) {
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(
+              text = "You've reached your monthly Free Plan limit. Upgrade to Pro for unlimited bookings.",
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.Medium,
+              color = MaterialTheme.colorScheme.onErrorContainer,
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            )
+          }
+        } else {
+          Text(
+            text =
+              buildAnnotatedString {
+                append("Enjoy up to ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                  append("$limit confirmed service bookings per month")
+                }
+                append(" with your Free Plan.")
+              },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+        }
+
+        LinearProgressIndicator(
+          progress = { progress },
           color =
             if (limitReached) MaterialTheme.colorScheme.error
             else MaterialTheme.colorScheme.primary,
-          modifier = Modifier.testTag("free_plan_remaining_text"),
+          trackColor = MaterialTheme.colorScheme.surfaceVariant,
+          strokeCap = StrokeCap.Round,
+          modifier =
+            Modifier.fillMaxWidth()
+              .height(8.dp)
+              .clip(RoundedCornerShape(50))
+              .testTag("free_plan_usage_progress"),
         )
+
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = "$used of $limit bookings used",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("free_plan_usage_text"),
+          )
+          Text(
+            text = "$remaining bookings remaining",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color =
+              if (limitReached) MaterialTheme.colorScheme.error
+              else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.testTag("free_plan_remaining_text"),
+          )
+        }
       }
 
-      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+      if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          imageVector = Icons.Rounded.WorkspacePremium,
-          contentDescription = null,
-          tint = DispatchAmber,
-          modifier = Modifier.size(20.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            imageVector = Icons.Rounded.WorkspacePremium,
+            contentDescription = null,
+            tint = DispatchAmber,
+            modifier = Modifier.size(20.dp),
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "Want unlimited bookings?",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+        }
+
         Text(
-          text = "Want unlimited bookings?",
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface,
+          text = "Upgrade to SkillConnect Pro and receive unlimited service bookings.",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-      }
 
-      Text(
-        text = "Upgrade to SkillConnect Pro and receive unlimited service bookings.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
+        Button(
+          onClick = onOpenSubscription,
+          shape = RoundedCornerShape(50),
+          colors =
+            ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.primary,
+              contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+          modifier =
+            Modifier.fillMaxWidth()
+              .height(48.dp)
+              .testTag("profile_upgrade_pro_button"),
+        ) {
+          Text(
+            text = "Upgrade to Pro – Rs. 499/month",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Icon(
+            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+          )
+        }
 
-      Button(
-        onClick = onOpenSubscription,
-        shape = RoundedCornerShape(50),
-        colors =
-          ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-          ),
-        modifier =
-          Modifier.fillMaxWidth()
-            .height(48.dp)
-            .testTag("profile_upgrade_pro_button"),
-      ) {
         Text(
-          text = "Upgrade to Pro – Rs. 499/month",
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.Bold,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Icon(
-          imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-          contentDescription = null,
-          modifier = Modifier.size(18.dp),
+          text = "Upgrade anytime. Your Free Plan remains available until then.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = TextAlign.Center,
+          modifier = Modifier.fillMaxWidth(),
         )
       }
-
-      Text(
-        text = "Upgrade anytime. Your Free Plan remains available until then.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth(),
-      )
     }
   }
 }

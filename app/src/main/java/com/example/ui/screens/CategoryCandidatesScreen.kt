@@ -78,6 +78,7 @@ import com.example.data.LocationHelper
 import com.example.model.Coordinates
 import com.example.model.ServiceCategories
 import com.example.model.ServiceCategory
+import com.example.model.SubscriptionFeatureFlags
 import com.example.model.UiState
 import com.example.ui.TechnicianWithDistance
 import com.example.ui.theme.DeepTeal
@@ -121,7 +122,9 @@ fun CategoryCandidatesScreen(
       }
       CategoryPromoAction.JOIN_SKILLCONNECT -> onOpenProHub()
       CategoryPromoAction.FIND_NEARBY_SERVICES -> onOpenMap()
-      CategoryPromoAction.EXPLORE_PRO_PLAN -> onOpenSubscription()
+      CategoryPromoAction.EXPLORE_PRO_PLAN ->
+        if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) onOpenSubscription()
+        else onExploreServices()
     }
   }
 

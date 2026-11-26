@@ -8,6 +8,7 @@ import com.example.model.Coordinates
 import com.example.model.ServiceBooking
 import com.example.model.ServiceCategories
 import com.example.model.ServiceCategoryEntity
+import com.example.model.SubscriptionFeatureFlags
 import com.example.model.SubscriptionRulesCalculator
 import com.example.model.SubscriptionTier
 import com.example.model.TechnicianProfile
@@ -33,10 +34,13 @@ class ExampleUnitTest {
 
   @Test
   fun categories_and_statuses_resolveSafely() {
-    assertEquals(21, ServiceCategories.defaults.size)
-    assertEquals("Electrician", ServiceCategories.byId("electrical").name)
-    assertEquals("Electrician", ServiceCategories.byId("electrician").name)
-    assertEquals("General Labour", ServiceCategories.byId("unknown_id").name)
+    assertEquals(8, ServiceCategories.defaults.size)
+    assertEquals("Home & Technical Services", ServiceCategories.byId("electrical").name)
+    assertEquals("Home & Technical Services", ServiceCategories.byId("electrician").name)
+    assertEquals("Solar & Electrical Systems", ServiceCategories.byId("solar_technician").name)
+    assertEquals("Automotive Services", ServiceCategories.byId("mechanic").name)
+    assertEquals("Electrician", ServiceCategories.legacySubcategoryForId("electrician"))
+    assertEquals("Home & Technical Services", ServiceCategories.byId("unknown_id").name)
     assertEquals(BookingStatus.EN_ROUTE, BookingStatus.fromRaw("EN_ROUTE"))
     assertEquals(BookingStatus.REQUESTED, BookingStatus.fromRaw("LEGACY_UNKNOWN"))
     assertEquals(VerificationStatus.APPROVED, VerificationStatus.fromRaw("APPROVED"))
@@ -46,6 +50,16 @@ class ExampleUnitTest {
       ServiceCategories.mergeWithRemote(
         listOf(
           ServiceCategoryEntity(
+            id = "electrician",
+            categoryId = "electrician",
+            name = "Old Electrician",
+            subtitle = "Legacy flat item",
+            iconKey = "electrician",
+            subcategories = listOf("Wiring"),
+            active = true,
+            sortOrder = 1L,
+          ),
+          ServiceCategoryEntity(
             id = "drone_tech",
             categoryId = "drone_tech",
             name = "Drone Repair",
@@ -54,10 +68,10 @@ class ExampleUnitTest {
             subcategories = listOf("Gimbal"),
             active = true,
             sortOrder = 22L,
-          )
+          ),
         )
       )
-    assertEquals(22, merged.size)
+    assertEquals(9, merged.size)
     assertEquals("Drone Repair", ServiceCategories.byId("drone_tech", merged).name)
   }
 
@@ -163,8 +177,8 @@ class ExampleUnitTest {
     assertEquals(5, freeStatus.confirmedThisMonth)
     assertEquals(5, freeStatus.requestsThisMonth)
     assertEquals(6, freeStatus.totalHistoryCount)
-    assertFalse(freeStatus.canConfirmAnotherBooking)
-    assertFalse(freeStatus.canReceiveMoreRequests)
+    assertTrue(freeStatus.canConfirmAnotherBooking)
+    assertTrue(freeStatus.canReceiveMoreRequests)
 
     val proStatus =
       SubscriptionRulesCalculator.computeStatus(
@@ -176,7 +190,7 @@ class ExampleUnitTest {
     assertTrue(proStatus.canConfirmAnotherBooking)
     assertTrue(proStatus.canReceiveMoreRequests)
     assertEquals("Rs. 499/month", SubscriptionTier.PRO.feeLabel)
-    assertEquals("Automatic reset", SubscriptionTier.FREE.renewalLabel)
+    assertEquals("Unlimited free bookings", SubscriptionTier.FREE.renewalLabel)
     assertEquals("Subscription renewal", SubscriptionTier.PRO.renewalLabel)
 
     // Automatic reset in December
@@ -217,8 +231,15 @@ class ExampleUnitTest {
     assertEquals("Local Services Made Easy.", slides[3].headline)
     assertEquals("Find Nearby Services", slides[3].ctaLabel)
 
-    assertEquals("Ready for More Bookings?", slides[4].headline)
-    assertEquals("Explore Pro Plan", slides[4].ctaLabel)
+    assertEquals(
+      if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) "Ready for More Bookings?"
+      else "All Bookings Recorded Free!",
+      slides[4].headline,
+    )
+    assertEquals(
+      if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) "Explore Pro Plan" else "Explore Services",
+      slides[4].ctaLabel,
+    )
     assertEquals(CategoryPromoAction.EXPLORE_PRO_PLAN, slides[4].action)
   }
 }

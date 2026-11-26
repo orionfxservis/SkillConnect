@@ -5,6 +5,10 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+object SubscriptionFeatureFlags {
+  const val PRO_PLAN_ENABLED: Boolean = false
+}
+
 enum class SubscriptionTier(
   val title: String,
   val feeLabel: String,
@@ -15,9 +19,9 @@ enum class SubscriptionTier(
   FREE(
     title = "Free",
     feeLabel = "Free",
-    monthlyConfirmedLimit = 5,
-    monthlyRequestLimit = 5,
-    renewalLabel = "Automatic reset",
+    monthlyConfirmedLimit = null,
+    monthlyRequestLimit = null,
+    renewalLabel = "Unlimited free bookings",
   ),
   PRO(
     title = "Pro",

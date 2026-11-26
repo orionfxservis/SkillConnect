@@ -90,7 +90,7 @@ fun GuestAuthStepperCard(
   var isSignUpMode by remember { mutableStateOf(true) }
   var activeStep by remember { mutableIntStateOf(0) }
   var selectedCategoryId by remember(allCategories) {
-    mutableStateOf(allCategories.firstOrNull()?.id ?: "electrician")
+    mutableStateOf(allCategories.firstOrNull()?.id ?: "home_technical")
   }
   var emailInput by remember { mutableStateOf("") }
   var verificationCodeInput by remember { mutableStateOf("") }
@@ -785,7 +785,7 @@ private fun AuthRoleCategoryCard(
 ) {
   val shortSub =
     remember(category.id) {
-      category.subcategories.firstOrNull() ?: category.subtitle.substringBefore(",")
+      "${category.subcategories.size} services"
     }
   Surface(
     onClick = onClick,
@@ -796,23 +796,32 @@ private fun AuthRoleCategoryCard(
         width = if (selected) 2.dp else 1.dp,
         color = if (selected) accentColor else defaultBorder,
       ),
-    modifier = Modifier.width(106.dp).height(78.dp).testTag("auth_category_${category.id}"),
+    modifier = Modifier.width(136.dp).height(84.dp).testTag("auth_category_${category.id}"),
   ) {
     Column(
-      modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 6.dp),
+      modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center,
     ) {
-      Icon(
-        imageVector = category.icon,
-        contentDescription = category.name,
-        tint = if (selected) accentColor else category.tint,
-        modifier = Modifier.size(24.dp),
-      )
+      Box(
+        modifier =
+          Modifier.size(32.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(category.containerBg),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+          imageVector = category.icon,
+          contentDescription = category.name,
+          tint = category.tint,
+          modifier = Modifier.size(19.dp),
+        )
+      }
       Spacer(modifier = Modifier.height(4.dp))
       Text(
         text = category.name,
-        style = MaterialTheme.typography.labelLarge,
+        fontSize = 11.sp,
+        lineHeight = 13.sp,
         fontWeight = FontWeight.Bold,
         color = if (selected) accentColor else MaterialTheme.colorScheme.onSurface,
         maxLines = 1,

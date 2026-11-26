@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.model.SubscriptionFeatureFlags
 import com.example.ui.theme.DeepTeal
 import com.example.ui.theme.StarGold
 import kotlinx.coroutines.delay
@@ -123,10 +124,20 @@ object CategoryPromoSlides {
       ),
       CategoryPromoSlideData(
         id = "slide_5_unlimited_bookings",
-        eyebrow = "Unlimited Booking Opportunities",
-        headline = "Ready for More Bookings?",
-        description = "Explore SkillConnect Pro and enjoy unlimited service bookings.",
-        ctaLabel = "Explore Pro Plan",
+        eyebrow =
+          if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) "Unlimited Booking Opportunities"
+          else "Unlimited Free Bookings",
+        headline =
+          if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) "Ready for More Bookings?"
+          else "All Bookings Recorded Free!",
+        description =
+          if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED)
+            "Explore SkillConnect Pro and enjoy unlimited service bookings."
+          else
+            "Accept unlimited service bookings on your Free Account with full history.",
+        ctaLabel =
+          if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) "Explore Pro Plan"
+          else "Explore Services",
         imageRes = R.drawable.img_cat_slide_5,
         action = CategoryPromoAction.EXPLORE_PRO_PLAN,
       ),

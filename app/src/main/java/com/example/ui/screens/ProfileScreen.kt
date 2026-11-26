@@ -69,8 +69,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.ImageEncodingHelper
 import com.example.model.ProviderSubscriptionStatus
+import com.example.model.ServiceCategories
 import com.example.model.ServiceCategory
 import com.example.model.ServiceComplaint
+import com.example.model.SubscriptionFeatureFlags
 import com.example.model.SubscriptionTier
 import com.example.model.TechnicianProfile
 import com.example.model.UiState
@@ -255,11 +257,19 @@ fun ProfileScreen(
             icon = Icons.Rounded.WorkspacePremium,
             title = "My Subscription",
             subtitle =
-              if (!isSignedIn) "Service Booking Plans • Free & Pro (Rs. 499/mo)"
-              else if (subscriptionStatus.tier == SubscriptionTier.PRO)
-                "Pro Plan • Unlimited bookings (Rs. 499/month)"
-              else
-                "Free Plan • ${subscriptionStatus.confirmedThisMonth}/5 confirmed this month",
+              when {
+                !isSignedIn && !SubscriptionFeatureFlags.PRO_PLAN_ENABLED ->
+                  "Free Plan • Unlimited service bookings"
+                !isSignedIn ->
+                  "Service Booking Plans • Free & Pro (Rs. 499/mo)"
+                SubscriptionFeatureFlags.PRO_PLAN_ENABLED &&
+                  subscriptionStatus.tier == SubscriptionTier.PRO ->
+                  "Pro Plan • Unlimited bookings (Rs. 499/month)"
+                !SubscriptionFeatureFlags.PRO_PLAN_ENABLED ->
+                  "Free Plan • ${subscriptionStatus.confirmedThisMonth} confirmed this month (${subscriptionStatus.totalHistoryCount} total)"
+                else ->
+                  "Free Plan • ${subscriptionStatus.confirmedThisMonth}/5 confirmed this month"
+              },
             onClick = onOpenSubscription,
             modifier = Modifier.testTag("menu_my_subscription"),
           )
@@ -289,6 +299,7 @@ fun ProfileScreen(
       ProviderEnrolBannerCard(
         isEnrolledProvider = isEnrolledProvider,
         myTechnicianProfile = myTechnicianProfile,
+        categories = categories,
         onClick = {
           when {
             !isSignedIn -> scope.launch { authCardBringIntoView.bringIntoView() }
@@ -481,6 +492,7 @@ private fun IdentitySummaryCard(
 private fun ProviderEnrolBannerCard(
   isEnrolledProvider: Boolean,
   myTechnicianProfile: TechnicianProfile?,
+  categories: List<ServiceCategory>,
   onClick: () -> Unit,
 ) {
   Card(
@@ -523,6 +535,20 @@ private fun ProviderEnrolBannerCard(
               color = OnEmeraldContainer,
             )
             if (myTechnicianProfile != null) {
+              val resolvedCategory = ServiceCategories.byId(myTechnicianProfile.categoryId, categories)
+              val resolvedSub =
+                myTechnicianProfile.subcategory.takeIf { it.isNotBlank() }
+                  ?: ServiceCategories.legacySubcategoryForId(myTechnicianProfile.categoryId)
+              Text(
+                text =
+                  if (!resolvedSub.isNullOrBlank()) "${resolvedCategory.name} • $resolvedSub"
+                  else resolvedCategory.name,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = OnEmeraldContainer.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
               Spacer(modifier = Modifier.height(2.dp))
               val statusText =
                 when (myTechnicianProfile.verificationEnum) {

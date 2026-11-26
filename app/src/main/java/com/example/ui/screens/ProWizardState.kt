@@ -103,17 +103,33 @@ class ProWizardState(
   var profilePhotoData by mutableStateOf(existingTech?.profilePhotoData ?: "")
   var cnicNumber by mutableStateOf(existingVerify?.cnicNumber ?: "")
 
-  // Category (selectable in Section A dropdown & synced with Step 2)
-  var categoryId by mutableStateOf(
+  private val initialCategory: ServiceCategory =
     ServiceCategories.byId(
       existingTech?.categoryId?.takeIf { it.isNotBlank() }
         ?: EmailAuthService.lastSignUpCategoryId?.takeIf { it.isNotBlank() }
-        ?: "electrician",
+        ?: "home_technical",
       categories,
-    ).id
+    )
+
+  // Category (selectable in Section A dropdown & synced with Step 2)
+  var categoryId by mutableStateOf(initialCategory.id)
+  var additionalCategoryIds by mutableStateOf(
+    (existingTech?.additionalCategoryIds ?: emptyList())
+      .map { ServiceCategories.byId(it, categories).id }
+      .filter { it != initialCategory.id }
+      .distinct()
   )
-  var additionalCategoryIds by mutableStateOf(existingTech?.additionalCategoryIds ?: emptyList())
-  var subcategory by mutableStateOf(existingTech?.subcategory ?: "")
+  var subcategory by mutableStateOf(
+    existingTech?.subcategory
+      ?.takeIf { stored ->
+        stored.isNotBlank() && initialCategory.subcategories.any { it.equals(stored, ignoreCase = true) }
+      }
+      ?.let { stored ->
+        initialCategory.subcategories.firstOrNull { it.equals(stored, ignoreCase = true) } ?: stored
+      }
+      ?: ServiceCategories.legacySubcategoryForId(existingTech?.categoryId)
+      ?: initialCategory.subcategories.firstOrNull().orEmpty()
+  )
   var professionalTitle by mutableStateOf(existingTech?.professionalTitle ?: "")
   var expertise by mutableStateOf(existingTech?.expertise ?: "")
   var yearsText by mutableStateOf((existingTech?.yearsExperience ?: 3L).toString())
@@ -124,7 +140,9 @@ class ProWizardState(
   // Step 3: Location & Service Area
   var city by mutableStateOf(existingTech?.city?.ifBlank { "Karachi" } ?: "Karachi")
   var workingArea by mutableStateOf(
-    existingTech?.workingArea ?: userProfile?.defaultArea ?: ""
+    existingTech?.workingArea?.ifBlank { null }
+      ?: userProfile?.defaultArea?.ifBlank { null }
+      ?: "Karachi"
   )
   var radiusKm by mutableFloatStateOf((existingTech?.serviceRadiusKm ?: 10L).toFloat())
   var preferredAreas by mutableStateOf(existingTech?.preferredAreas ?: emptyList())
@@ -154,6 +172,63 @@ class ProWizardState(
   var certificatePhotoData by mutableStateOf(existingVerify?.certificatePhotoData ?: "")
   var termsAccepted by mutableStateOf(existingTech?.termsAccepted ?: false)
   var verificationConsent by mutableStateOf(existingTech?.verificationConsent ?: false)
+
+  fun selectCategory(cat: ServiceCategory) {
+    val previousSub = subcategory
+    categoryId = cat.id
+    additionalCategoryIds = additionalCategoryIds.filter { it != cat.id }
+    val nextSub =
+      cat.subcategories.firstOrNull { it.equals(previousSub, ignoreCase = true) }
+        ?: cat.subcategories.firstOrNull().orEmpty()
+    subcategory = nextSub
+
+    val allKnownCategoryAndSubNames =
+      ServiceCategories.defaults.flatMap { listOf(it.name) + it.subcategories }
+    if (
+      professionalTitle.isBlank() ||
+        professionalTitle.equals(previousSub, ignoreCase = true) ||
+        allKnownCategoryAndSubNames.any { it.equals(professionalTitle.trim(), ignoreCase = true) }
+    ) {
+      professionalTitle = nextSub.ifBlank { cat.name }
+    }
+    if (
+      expertise.isBlank() ||
+        expertise.equals(previousSub, ignoreCase = true) ||
+        allKnownCategoryAndSubNames.any { it.equals(expertise.trim(), ignoreCase = true) }
+    ) {
+      expertise = nextSub.ifBlank { cat.name }
+    }
+    validationError = null
+  }
+
+  fun selectSubcategory(sub: String) {
+    val previousSub = subcategory
+    subcategory = sub
+    val allKnownSubNames = ServiceCategories.defaults.flatMap { it.subcategories }
+    if (
+      professionalTitle.isBlank() ||
+        professionalTitle.equals(previousSub, ignoreCase = true) ||
+        allKnownSubNames.any { it.equals(professionalTitle.trim(), ignoreCase = true) }
+    ) {
+      professionalTitle = sub
+    }
+    if (
+      expertise.isBlank() ||
+        expertise.equals(previousSub, ignoreCase = true) ||
+        allKnownSubNames.any { it.equals(expertise.trim(), ignoreCase = true) }
+    ) {
+      expertise = sub
+    }
+    validationError = null
+  }
+
+  fun validateQuickUpdate(): String? =
+    when {
+      categoryId.trim().isEmpty() -> "Please select a service category."
+      fullName.trim().length < 2 -> "Enter your full name (at least 2 characters)."
+      contactPhone.trim().length < 5 -> "Enter a valid mobile number (e.g. +92300...)."
+      else -> null
+    }
 
   fun validateStep(step: Int): String? =
     when (step) {
@@ -214,15 +289,20 @@ class ProWizardState(
   ): TechnicianRegistrationInput {
     val finalLat = if (lat != 0.0) lat else (userCoordinates?.latitude ?: 0.0)
     val finalLng = if (lng != 0.0) lng else (userCoordinates?.longitude ?: 0.0)
+    val resolvedSub = subcategory.trim().ifBlank { selectedCategory.subcategories.firstOrNull().orEmpty() }
+    val resolvedTitle = professionalTitle.trim().ifBlank { resolvedSub.ifBlank { selectedCategory.name } }
+    val resolvedExpertise = expertise.trim().ifBlank { resolvedSub.ifBlank { selectedCategory.name } }
+    val resolvedArea = workingArea.trim().ifBlank { city.trim().ifBlank { "Karachi" } }
+    val resolvedHours = availabilityHours.trim().ifBlank { "09:00 AM - 07:00 PM" }
     return TechnicianRegistrationInput(
       fullName = fullName,
       email = email,
       gender = gender,
-      categoryId = categoryId,
-      additionalCategoryIds = additionalCategoryIds,
-      subcategory = subcategory,
-      professionalTitle = professionalTitle.trim().ifBlank { selectedCategory.name },
-      expertise = expertise,
+      categoryId = selectedCategory.id,
+      additionalCategoryIds = additionalCategoryIds.filter { it != selectedCategory.id },
+      subcategory = resolvedSub,
+      professionalTitle = resolvedTitle,
+      expertise = resolvedExpertise,
       bio = bio,
       qualification = qualification,
       yearsExperience = (yearsText.toLongOrNull() ?: 1L).coerceIn(0L, 70L),
@@ -232,11 +312,11 @@ class ProWizardState(
       hourlyCharge = normalizePkrForSave(hourlyCharge),
       dailyCharge = normalizePkrForSave(dailyCharge),
       serviceChargeNote = serviceChargeNote,
-      workingDays = workingDays,
-      availabilityHours = availabilityHours,
+      workingDays = workingDays.ifEmpty { listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat") },
+      availabilityHours = resolvedHours,
       emergencyAvailable = emergencyAvailable,
-      city = city,
-      workingArea = workingArea,
+      city = city.trim().ifBlank { "Karachi" },
+      workingArea = resolvedArea,
       preferredAreas = preferredAreas,
       travelToCustomer = travelToCustomer,
       serviceRadiusKm = radiusKm.roundToLong().coerceIn(1L, 200L),

@@ -19,6 +19,7 @@ import com.example.model.ServiceCategory
 import com.example.model.ServiceCategoryEntity
 import com.example.model.ServiceComplaint
 import com.example.model.ServiceReview
+import com.example.model.SubscriptionFeatureFlags
 import com.example.model.SubscriptionRulesCalculator
 import com.example.model.SubscriptionTier
 import com.example.model.TechnicianProfile
@@ -136,7 +137,13 @@ class FixNearViewModel(
   val phoneVerifiedSession: StateFlow<Boolean> = _phoneVerifiedSession.asStateFlow()
 
   private val _subscriptionTier =
-    MutableStateFlow(subscriptionStore?.loadTier(currentUserId) ?: SubscriptionTier.FREE)
+    MutableStateFlow(
+      if (SubscriptionFeatureFlags.PRO_PLAN_ENABLED) {
+        subscriptionStore?.loadTier(currentUserId) ?: SubscriptionTier.FREE
+      } else {
+        SubscriptionTier.FREE
+      }
+    )
   private val _proRenewalAtMillis =
     MutableStateFlow(subscriptionStore?.loadProRenewalMillis(currentUserId))
 
@@ -611,13 +618,16 @@ class FixNearViewModel(
   ) {
     viewModelScope.launch {
       _isBusy.value = true
+      val isExisting = (myTechnicianState.value as? UiState.Success)?.data != null
       val normalized =
         input.copy(phoneVerified = input.phoneVerified || _phoneVerifiedSession.value)
       val result = repository.upsertTechnicianProfile(normalized)
       _isBusy.value = false
       result
         .onSuccess {
-          _actionMessage.value = "Service Provider registration submitted & saved"
+          _actionMessage.value =
+            if (isExisting) "Provider profile updated"
+            else "Service Provider registration submitted & saved"
           onSuccess()
         }
         .onFailure {
@@ -710,7 +720,7 @@ class FixNearViewModel(
     _subscriptionTier.value = SubscriptionTier.FREE
     _proRenewalAtMillis.value = null
     subscriptionStore?.savePlan(currentUserId, SubscriptionTier.FREE, null)
-    _actionMessage.value = "Switched to Free Plan (5 monthly confirmed bookings)."
+    _actionMessage.value = "Free Plan active — Unlimited bookings recorded."
   }
 
   fun updateBookingStatus(booking: ServiceBooking, status: BookingStatus) {

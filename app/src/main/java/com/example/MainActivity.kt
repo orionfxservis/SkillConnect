@@ -591,7 +591,7 @@ private fun MainFixNearShell(
             route = AppRoutes.CATEGORY_CANDIDATES,
             arguments = listOf(navArgument("categoryId") { type = NavType.StringType }),
           ) { entry ->
-            val categoryId = entry.arguments?.getString("categoryId") ?: "electrician"
+            val categoryId = entry.arguments?.getString("categoryId") ?: "home_technical"
             CategoryCandidatesScreen(
               categoryId = categoryId,
               allTechniciansState = allTechniciansNearToFarState,

@@ -18,15 +18,17 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -35,8 +37,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
@@ -175,27 +175,9 @@ fun DiscoverScreen(
 
   val orderedCategories =
     remember(categories) {
-      val preferredOrder =
-        listOf(
-          "electrician",
-          "plumber",
-          "ac_technician",
-          "mechanic",
-          "carpenter",
-          "it_expert",
-          "cctv_expert",
-          "solar_technician",
-          "mobile_repair",
-          "painter",
-          "welder",
-        )
-      val byId = categories.associateBy { it.id }
-      val prioritized = preferredOrder.mapNotNull { byId[it] }
-      val remaining = categories.filter { cat -> preferredOrder.none { it == cat.id } }
-      prioritized + remaining
+      categories.sortedWith(compareBy<ServiceCategory> { it.sortOrder }.thenBy { it.name })
     }
 
-  val categoryRowState = rememberLazyListState()
   val pagerState = rememberPagerState(pageCount = { 3 })
 
   Box(modifier = modifier.fillMaxSize().background(LightBackground)) {
@@ -302,7 +284,7 @@ fun DiscoverScreen(
           }
         }
       } else {
-        // Fixed Popular Categories Header + Left/Right Horizontally Scrolling Category Cards
+        // 8 Main Service Group Cards (2-column grid matching website) + Hero Banner
         Column(
           modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp, bottom = 4.dp),
         ) {
@@ -312,127 +294,44 @@ fun DiscoverScreen(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Text(
-              text = "Popular Categories",
+              text = "Service Categories",
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onBackground,
             )
-
-            Row(
-              horizontalArrangement = Arrangement.spacedBy(2.dp),
-              verticalAlignment = Alignment.CenterVertically,
+            Surface(
+              shape = RoundedCornerShape(50),
+              color = EmeraldContainer,
             ) {
-              val canScrollLeft = categoryRowState.canScrollBackward
-              val canScrollRight = categoryRowState.canScrollForward
-
-              IconButton(
-                onClick = {
-                  scope.launch {
-                    val target = (categoryRowState.firstVisibleItemIndex - 2).coerceAtLeast(0)
-                    categoryRowState.animateScrollToItem(target)
-                  }
-                },
-                enabled = canScrollLeft,
-                modifier = Modifier.size(48.dp).testTag("categories_scroll_left"),
-              ) {
-                Surface(
-                  shape = CircleShape,
-                  color = if (canScrollLeft) EmeraldContainer else Color(0xFFF1F5F9),
-                  border =
-                    BorderStroke(
-                      1.dp,
-                      if (canScrollLeft) CategoryTileBorder else Color(0xFFE2E8F0),
-                    ),
-                  modifier = Modifier.size(34.dp),
-                ) {
-                  Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                      imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
-                      contentDescription = "Scroll categories left",
-                      tint = if (canScrollLeft) DeepTeal else Color(0xFF94A3B8),
-                      modifier = Modifier.size(22.dp),
-                    )
-                  }
-                }
-              }
-
-              IconButton(
-                onClick = {
-                  scope.launch {
-                    val totalCols = categoryRowState.layoutInfo.totalItemsCount
-                    val lastIndex = (totalCols - 1).coerceAtLeast(0)
-                    val target =
-                      (categoryRowState.firstVisibleItemIndex + 2).coerceAtMost(lastIndex)
-                    categoryRowState.animateScrollToItem(target)
-                  }
-                },
-                enabled = canScrollRight,
-                modifier = Modifier.size(48.dp).testTag("categories_scroll_right"),
-              ) {
-                Surface(
-                  shape = CircleShape,
-                  color = if (canScrollRight) EmeraldContainer else Color(0xFFF1F5F9),
-                  border =
-                    BorderStroke(
-                      1.dp,
-                      if (canScrollRight) CategoryTileBorder else Color(0xFFE2E8F0),
-                    ),
-                  modifier = Modifier.size(34.dp),
-                ) {
-                  Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                      imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                      contentDescription = "Scroll categories right",
-                      tint = if (canScrollRight) DeepTeal else Color(0xFF94A3B8),
-                      modifier = Modifier.size(22.dp),
-                    )
-                  }
-                }
-              }
+              Text(
+                text = "${orderedCategories.size} groups",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = OnEmeraldContainer,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+              )
             }
           }
 
-          Spacer(modifier = Modifier.height(4.dp))
+          Spacer(modifier = Modifier.height(6.dp))
 
-          BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            val rowSpacing = 8.dp
-            val rowsPerColumn = if (maxHeight >= 232.dp) 3 else 2
-            val tileHeight =
-              remember(maxHeight, rowsPerColumn) {
-                val totalGaps = rowSpacing * (rowsPerColumn - 1) + 6.dp
-                ((maxHeight - totalGaps) / rowsPerColumn).coerceIn(72.dp, 90.dp)
-              }
-            val tileWidth =
-              remember(maxWidth) { ((maxWidth - 32.dp - 30.dp) / 4f).coerceIn(74.dp, 108.dp) }
-            val adaptiveColumns =
-              remember(orderedCategories, rowsPerColumn) {
-                orderedCategories.chunked(rowsPerColumn)
-              }
-
-            LazyRow(
-              state = categoryRowState,
-              contentPadding = PaddingValues(horizontal = 16.dp),
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-              modifier = Modifier.fillMaxSize().testTag("popular_categories_carousel"),
-            ) {
-              items(
-                items = adaptiveColumns,
-                key = { col -> col.firstOrNull()?.id ?: "" },
-              ) { colCategories ->
-                Column(
-                  modifier = Modifier.width(tileWidth),
-                  verticalArrangement = Arrangement.spacedBy(rowSpacing),
-                ) {
-                  colCategories.forEach { cat ->
-                    CategoryTile(
-                      category = cat,
-                      selected = selectedCategoryId == cat.id,
-                      onClick = { onOpenCategory(cat.id) },
-                      modifier = Modifier.fillMaxWidth().height(tileHeight),
-                    )
-                  }
-                }
-              }
+          LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f).testTag("popular_categories_carousel"),
+          ) {
+            items(
+              items = orderedCategories,
+              key = { it.id },
+            ) { cat ->
+              CategoryTile(
+                category = cat,
+                selected = selectedCategoryId == cat.id,
+                onClick = { onOpenCategory(cat.id) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+              )
             }
           }
         }
@@ -453,7 +352,7 @@ fun DiscoverScreen(
                   ctaLabel = "Explore Now",
                   drawableRes = R.drawable.img_hero_technician,
                   onCtaClick = {
-                    onOpenCategory(orderedCategories.firstOrNull()?.id ?: "electrician")
+                    onOpenCategory(orderedCategories.firstOrNull()?.id ?: "home_technical")
                   },
                 )
               1 ->
@@ -1008,7 +907,7 @@ private fun CategoryTile(
 ) {
   Surface(
     shape = RoundedCornerShape(14.dp),
-    color = if (selected) EmeraldContainer else CategoryTileBg,
+    color = if (selected) EmeraldContainer else Color.White,
     border =
       if (selected) BorderStroke(1.5.dp, DeepTeal)
       else BorderStroke(1.dp, CategoryTileBorder),
@@ -1019,30 +918,51 @@ private fun CategoryTile(
         .clickable(onClick = onClick)
         .testTag("category_chip_${category.id}"),
   ) {
-    Column(
-      modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 5.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.Center,
+    Row(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-      Icon(
-        imageVector = category.icon,
-        contentDescription = category.name,
-        tint = category.tint,
-        modifier = Modifier.size(30.dp),
-      )
-      Spacer(modifier = Modifier.height(4.dp))
-      Text(
-        text = category.name,
-        fontSize = 10.sp,
-        lineHeight = 11.5.sp,
-        letterSpacing = (-0.2).sp,
-        fontWeight = FontWeight.Medium,
-        color = Color(0xFF1E293B),
-        maxLines = 2,
-        softWrap = true,
-        overflow = TextOverflow.Ellipsis,
-        textAlign = TextAlign.Center,
-      )
+      Box(
+        modifier =
+          Modifier.size(38.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(category.containerBg),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+          imageVector = category.icon,
+          contentDescription = category.name,
+          tint = category.tint,
+          modifier = Modifier.size(21.dp),
+        )
+      }
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.Center,
+      ) {
+        Text(
+          text = category.name,
+          fontSize = 11.5.sp,
+          lineHeight = 13.5.sp,
+          letterSpacing = (-0.15).sp,
+          fontWeight = FontWeight.Bold,
+          color = Color(0xFF0F172A),
+          maxLines = 2,
+          softWrap = true,
+          overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+          text = "${category.subcategories.size} services",
+          fontSize = 10.sp,
+          lineHeight = 12.sp,
+          fontWeight = FontWeight.Medium,
+          color = Color(0xFF64748B),
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
     }
   }
 }

@@ -349,19 +349,36 @@ fun ProRegistrationWizard(
         } else {
           Button(
             onClick = {
-              val invalid = state.firstInvalidStep()
-              if (invalid != null) {
-                state.validationError = state.validateStep(invalid)
-                state.currentStep = invalid
-              } else {
-                state.validationError = null
-                onSaveEnrollment(
-                  state.toRegistrationInput(
-                    selectedCategory = selectedCategory,
-                    isPhoneVerified = isPhoneVerified,
-                    userCoordinates = userCoordinates,
+              if (existingTech != null) {
+                val quickErr = state.validateQuickUpdate()
+                if (quickErr != null) {
+                  state.validationError = quickErr
+                  state.currentStep = 0
+                } else {
+                  state.validationError = null
+                  onSaveEnrollment(
+                    state.toRegistrationInput(
+                      selectedCategory = selectedCategory,
+                      isPhoneVerified = isPhoneVerified,
+                      userCoordinates = userCoordinates,
+                    )
                   )
-                )
+                }
+              } else {
+                val invalid = state.firstInvalidStep()
+                if (invalid != null) {
+                  state.validationError = state.validateStep(invalid)
+                  state.currentStep = invalid
+                } else {
+                  state.validationError = null
+                  onSaveEnrollment(
+                    state.toRegistrationInput(
+                      selectedCategory = selectedCategory,
+                      isPhoneVerified = isPhoneVerified,
+                      userCoordinates = userCoordinates,
+                    )
+                  )
+                }
               }
             },
             enabled = !isBusy,
@@ -378,10 +395,49 @@ fun ProRegistrationWizard(
               Text(
                 text =
                   if (existingTech == null) "Submit Provider Registration"
-                  else "Save Profile Changes",
+                  else "Update Profile",
                 fontWeight = FontWeight.Bold,
               )
             }
+          }
+        }
+      }
+
+      if (existingTech != null && state.currentStep < 4) {
+        OutlinedButton(
+          onClick = {
+            val quickErr = state.validateQuickUpdate()
+            if (quickErr != null) {
+              state.validationError = quickErr
+              state.currentStep = 0
+            } else {
+              state.validationError = null
+              onSaveEnrollment(
+                state.toRegistrationInput(
+                  selectedCategory = selectedCategory,
+                  isPhoneVerified = isPhoneVerified,
+                  userCoordinates = userCoordinates,
+                )
+              )
+            }
+          },
+          enabled = !isBusy,
+          shape = RoundedCornerShape(14.dp),
+          border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+          modifier = Modifier.fillMaxWidth().height(50.dp).testTag("update_profile_quick_button"),
+        ) {
+          if (isBusy) {
+            CircularProgressIndicator(
+              modifier = Modifier.size(20.dp),
+              color = MaterialTheme.colorScheme.primary,
+              strokeWidth = 2.dp,
+            )
+          } else {
+            Text(
+              text = "Update Profile (${selectedCategory.name})",
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary,
+            )
           }
         }
       }

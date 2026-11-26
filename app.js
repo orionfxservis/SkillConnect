@@ -31,6 +31,7 @@ import {
 
 const STORAGE_KEY = 'skillconnect_web_admin_v3';
 const APK_RELEASE_URL = 'https://github.com/orionfxservis/SkillConnect/releases/tag/preview-apk';
+const PRO_PLAN_ENABLED = false;
 
 /* ==================== 8 MAIN SERVICE GROUPS & SUBCATEGORIES ==================== */
 const DEFAULT_CATEGORIES = [
@@ -253,11 +254,11 @@ function makeInitialSeedData() {
         bannerId: 'home_slide_3',
         placement: 'HOME',
         categoryId: 'all',
-        eyebrow: 'SkillConnect Pro',
-        headline: 'Unlimited Bookings & Leads',
+        eyebrow: PRO_PLAN_ENABLED ? 'SkillConnect Pro' : 'Unlimited Free Bookings',
+        headline: PRO_PLAN_ENABLED ? 'Unlimited Bookings & Leads' : 'All Bookings Recorded Free',
         description: 'Grow your skilled services business across your city.',
-        ctaLabel: 'Explore Pro Plan',
-        ctaAction: 'subscription',
+        ctaLabel: PRO_PLAN_ENABLED ? 'Explore Pro Plan' : 'Explore Services',
+        ctaAction: PRO_PLAN_ENABLED ? 'subscription' : 'explore_services',
         imageData: 'assets/images/mobile/img_welcome_connect.jpg',
         active: true,
         sortOrder: 3
@@ -320,11 +321,13 @@ function makeInitialSeedData() {
         bannerId: 'cat_slide_5',
         placement: 'CATEGORY',
         categoryId: 'all',
-        eyebrow: 'Unlimited Booking Opportunities',
-        headline: 'Ready for More Bookings?',
-        description: 'Explore SkillConnect Pro and enjoy unlimited service bookings.',
-        ctaLabel: 'Explore Pro Plan',
-        ctaAction: 'subscription',
+        eyebrow: PRO_PLAN_ENABLED ? 'Unlimited Booking Opportunities' : 'Unlimited Free Bookings',
+        headline: PRO_PLAN_ENABLED ? 'Ready for More Bookings?' : 'All Bookings Recorded Free!',
+        description: PRO_PLAN_ENABLED
+          ? 'Explore SkillConnect Pro and enjoy unlimited service bookings.'
+          : 'Accept unlimited service bookings on your Free Account with full history.',
+        ctaLabel: PRO_PLAN_ENABLED ? 'Explore Pro Plan' : 'Explore Services',
+        ctaAction: PRO_PLAN_ENABLED ? 'subscription' : 'explore_services',
         imageData: 'assets/images/mobile/img_cat_slide_5.jpg',
         active: true,
         sortOrder: 5
@@ -3157,7 +3160,11 @@ function getActiveBannersForCategory(categoryId) {
 function handleBannerCtaAction(action) {
   const a = String(action || 'explore_services');
   if (a === 'map') return navigateMobile('map');
-  if (a === 'subscription') return navigateMobile('subscription');
+  if (a === 'subscription') {
+    return PRO_PLAN_ENABLED
+      ? navigateMobile('subscription')
+      : openCategoryInMobile(state.selectedCategoryId || 'home_technical');
+  }
   if (a === 'prohub') return navigateMobile('prohub');
   if (a.startsWith('cat:')) return openCategoryInMobile(a.slice(4));
   openCategoryInMobile(state.selectedCategoryId || 'home_technical');
@@ -3476,10 +3483,10 @@ function renderMobileBookings() {
 }
 
 function renderMobileProfile() {
-  const used = Math.min(5, state.mobileMonthlyBookingsUsed);
+  const used = PRO_PLAN_ENABLED ? Math.min(5, state.mobileMonthlyBookingsUsed) : state.mobileMonthlyBookingsUsed;
   const remaining = Math.max(0, 5 - used);
   const pct = Math.round((used / 5) * 100);
-  const isPro = state.mobilePreviewPlan === 'PRO';
+  const isPro = PRO_PLAN_ENABLED && state.mobilePreviewPlan === 'PRO';
 
   const body = document.getElementById('mobileProfileBody');
   body.innerHTML = `
@@ -3510,41 +3517,56 @@ function renderMobileProfile() {
              <strong style="font-size:15px;">Your Free Account is Active</strong>
              <p style="margin:0;font-size:11.5px;color:#334155;">
                ${
-                 used >= 5
-                   ? "You've reached your monthly Free Plan limit. Upgrade to Pro for unlimited bookings."
-                   : 'Enjoy up to <strong>5 confirmed service bookings per month</strong> with your Free Plan.'
+                 PRO_PLAN_ENABLED
+                   ? used >= 5
+                     ? "You've reached your monthly Free Plan limit. Upgrade to Pro for unlimited bookings."
+                     : 'Enjoy up to <strong>5 confirmed service bookings per month</strong> with your Free Plan.'
+                   : 'Enjoy <strong>unlimited service bookings</strong> with your Free Plan. All bookings are automatically recorded.'
                }
              </p>
-             <div class="promo-progress-track">
-               <div class="promo-progress-fill" style="width:${pct}%;"></div>
-             </div>
-             <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;">
-               <span>${used} of 5 bookings used.</span>
-               <strong style="color:#065f46;">${remaining} bookings remaining.</strong>
-             </div>
-             <hr style="border:none;border-top:1px solid #e2e8f0;margin:2px 0;" />
-             <strong style="font-size:12.5px;">&#128081; Want unlimited bookings?</strong>
-             <p style="margin:0;font-size:11.5px;color:#334155;">Upgrade to SkillConnect Pro and receive unlimited service bookings.</p>
-             <button type="button" class="promo-upgrade-btn" id="openMySubscriptionBtn">Upgrade to Pro – Rs. 499/month &rarr;</button>
+             ${
+               PRO_PLAN_ENABLED
+                 ? `<div class="promo-progress-track">
+                      <div class="promo-progress-fill" style="width:${pct}%;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;">
+                      <span>${used} of 5 bookings used.</span>
+                      <strong style="color:#065f46;">${remaining} bookings remaining.</strong>
+                    </div>
+                    <hr style="border:none;border-top:1px solid #e2e8f0;margin:2px 0;" />
+                    <strong style="font-size:12.5px;">&#128081; Want unlimited bookings?</strong>
+                    <p style="margin:0;font-size:11.5px;color:#334155;">Upgrade to SkillConnect Pro and receive unlimited service bookings.</p>
+                    <button type="button" class="promo-upgrade-btn" id="openMySubscriptionBtn">Upgrade to Pro – Rs. 499/month &rarr;</button>`
+                 : `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:8px 10px;border-radius:10px;background:#ecfdf5;color:#065f46;">
+                      <span><strong>${used}</strong> bookings recorded</span>
+                      <strong style="font-size:11px;">Unlimited</strong>
+                    </div>`
+             }
            </div>`
     }
 
     <div class="info-card">
       <strong>Account Settings</strong>
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;">
-        <span>Preview Monthly Free Bookings (${used}/5)</span>
+        <span>${PRO_PLAN_ENABLED ? `Preview Monthly Free Bookings (${used}/5)` : `Preview Recorded Bookings (${used})`}</span>
         <button type="button" class="btn btn-outline btn-sm" id="simBookingIncBtn">+1 Booking</button>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;">
-        <span>Current Plan Mode</span>
-        <button type="button" class="btn btn-outline btn-sm" id="toggleFreeProPreviewBtn">Switch to ${isPro ? 'FREE' : 'PRO'}</button>
-      </div>
+      ${
+        PRO_PLAN_ENABLED
+          ? `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;">
+               <span>Current Plan Mode</span>
+               <button type="button" class="btn btn-outline btn-sm" id="toggleFreeProPreviewBtn">Switch to ${isPro ? 'FREE' : 'PRO'}</button>
+             </div>`
+          : ''
+      }
     </div>
   `;
 
   document.getElementById('openMySubscriptionBtn')?.addEventListener('click', () => navigateMobile('subscription'));
   document.getElementById('simBookingIncBtn')?.addEventListener('click', () => {
-    state.mobileMonthlyBookingsUsed = (state.mobileMonthlyBookingsUsed + 1) % 6;
+    state.mobileMonthlyBookingsUsed = PRO_PLAN_ENABLED
+      ? (state.mobileMonthlyBookingsUsed + 1) % 6
+      : state.mobileMonthlyBookingsUsed + 1;
     renderMobileProfile();
   });
   document.getElementById('toggleFreeProPreviewBtn')?.addEventListener('click', () => {
@@ -3554,7 +3576,7 @@ function renderMobileProfile() {
 }
 
 function renderMobileSubscription() {
-  const isPro = state.mobilePreviewPlan === 'PRO';
+  const isPro = PRO_PLAN_ENABLED && state.mobilePreviewPlan === 'PRO';
   const body = document.getElementById('mobileSubscriptionBody');
   body.innerHTML = `
     <div class="plan-compare-card">
@@ -3564,27 +3586,32 @@ function renderMobileSubscription() {
       </div>
       <div style="font-size:20px;font-weight:800;">Rs. 0 <span style="font-size:12px;font-weight:500;color:#64748b;">/ month</span></div>
       <ul style="margin:0;padding-left:18px;font-size:12px;color:#334155;line-height:1.6;">
-        <li>5 confirmed service bookings per month</li>
+        <li>${PRO_PLAN_ENABLED ? '5 confirmed service bookings per month' : 'Unlimited confirmed service bookings'}</li>
+        <li>Full booking history &amp; automatic recording</li>
         <li>Browse all 8 SkillConnect service groups</li>
         <li>Live GPS nearby search &amp; direct call</li>
       </ul>
     </div>
 
-    <div class="plan-compare-card pro">
-      <div class="info-card-top">
-        <strong>SkillConnect Pro</strong>
-        <span class="badge badge-amber">${isPro ? 'Active Pro' : 'Recommended'}</span>
-      </div>
-      <div style="font-size:20px;font-weight:800;color:#b45309;">Rs. 499 <span style="font-size:12px;font-weight:500;color:#64748b;">/ month</span></div>
-      <ul style="margin:0;padding-left:18px;font-size:12px;color:#334155;line-height:1.6;">
-        <li>Unlimited confirmed service bookings</li>
-        <li>Priority Skill Person matching &amp; renewal support</li>
-        <li>Zero monthly booking cap</li>
-      </ul>
-      <button type="button" class="promo-upgrade-btn" id="completeProUpgradeBtn">
-        ${isPro ? 'Pro Plan Active' : 'Complete Upgrade – Rs. 499/month'}
-      </button>
-    </div>
+    ${
+      PRO_PLAN_ENABLED
+        ? `<div class="plan-compare-card pro">
+             <div class="info-card-top">
+               <strong>SkillConnect Pro</strong>
+               <span class="badge badge-amber">${isPro ? 'Active Pro' : 'Recommended'}</span>
+             </div>
+             <div style="font-size:20px;font-weight:800;color:#b45309;">Rs. 499 <span style="font-size:12px;font-weight:500;color:#64748b;">/ month</span></div>
+             <ul style="margin:0;padding-left:18px;font-size:12px;color:#334155;line-height:1.6;">
+               <li>Unlimited confirmed service bookings</li>
+               <li>Priority Skill Person matching &amp; renewal support</li>
+               <li>Zero monthly booking cap</li>
+             </ul>
+             <button type="button" class="promo-upgrade-btn" id="completeProUpgradeBtn">
+               ${isPro ? 'Pro Plan Active' : 'Complete Upgrade – Rs. 499/month'}
+             </button>
+           </div>`
+        : ''
+    }
   `;
 
   document.getElementById('completeProUpgradeBtn')?.addEventListener('click', () => {
@@ -3715,7 +3742,9 @@ function openMobileBookingSheet(techId) {
       preferredTime: document.getElementById('mbTime').value.trim(),
       status: 'REQUESTED'
     });
-    state.mobileMonthlyBookingsUsed = Math.min(5, state.mobileMonthlyBookingsUsed + 1);
+    state.mobileMonthlyBookingsUsed = PRO_PLAN_ENABLED
+      ? Math.min(5, state.mobileMonthlyBookingsUsed + 1)
+      : state.mobileMonthlyBookingsUsed + 1;
     persistLocal();
     closeMobileSheet();
     showToast(`Booking sent to ${t.fullName}`);
