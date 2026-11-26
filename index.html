@@ -41,7 +41,10 @@
         </div>
 
         <button type="button" id="adminGoogleSignInBtn" class="btn btn-primary">
-          Sign in with Google (Admin)
+          Google Admin Sign-In
+        </button>
+        <button type="button" id="adminEmailSignInBtn" class="btn btn-soft">
+          Admin Email Login
         </button>
         <button type="button" id="adminSignOutBtn" class="btn btn-outline hidden">
           Sign Out
@@ -118,8 +121,8 @@
 
           <div class="admin-sidebar-footer">
             <div class="admin-meta-card">
-              <div class="admin-meta-title">Super Admin Rule</div>
-              <div class="admin-meta-sub" id="adminAccountSummary">orionfxservis@gmail.com</div>
+              <div class="admin-meta-title">Super Admin Account</div>
+              <div class="admin-meta-sub" id="adminAccountSummary">admin-skillconnect@orionfx.net</div>
             </div>
             <button type="button" id="resetPreviewDataBtn" class="btn btn-outline btn-sm" style="width:100%;">
               Reset Local Demo Cache
@@ -214,14 +217,11 @@
                 <div id="homeDefaultBody" class="home-default-stack">
                   <section class="sc-categories-section">
                     <div class="sc-section-header">
-                      <h2 class="sc-section-title">Popular Categories</h2>
-                      <div class="cat-scroll-arrows">
-                        <button type="button" class="cat-arrow-btn" id="catScrollLeftBtn" aria-label="Scroll categories left">&#8249;</button>
-                        <button type="button" class="cat-arrow-btn" id="catScrollRightBtn" aria-label="Scroll categories right">&#8250;</button>
-                      </div>
+                      <h2 class="sc-section-title">Service Categories</h2>
+                      <span style="font-size:11px;font-weight:700;color:#027245;">8 Groups</span>
                     </div>
-                    <div class="sc-categories-carousel" id="categoriesCarousel">
-                      <!-- Rendered dynamically -->
+                    <div class="sc-categories-grid" id="categoriesCarousel">
+                      <!-- Rendered dynamically: 8 Main Service Groups -->
                     </div>
                   </section>
 

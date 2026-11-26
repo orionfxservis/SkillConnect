@@ -9,6 +9,8 @@ import {
   isAdminUser,
   subscribeAuthState,
   signInAdminWithGoogle,
+  signInAdminWithEmailPassword,
+  sendAdminVerificationEmail,
   signOutAdmin,
   subscribePublicDirectory,
   subscribeAdminWorkspace,
@@ -26,33 +28,172 @@ import {
   resolveComplaintAdmin
 } from './firebase-admin.js';
 
-const STORAGE_KEY = 'skillconnect_web_admin_v2';
+const STORAGE_KEY = 'skillconnect_web_admin_v3';
 const APK_RELEASE_URL = 'https://github.com/orionfxservis/SkillConnect/releases/tag/preview-apk';
 
-/* ==================== 21 SERVICE CATEGORIES (MATCHING ANDROID Models.kt) ==================== */
+/* ==================== 8 MAIN SERVICE GROUPS & SUBCATEGORIES ==================== */
 const DEFAULT_CATEGORIES = [
-  { id: 'electrician', name: 'Electrician', subtitle: 'Wiring, UPS, Solar & Breaker Repair', icon: '⚡', bg: '#fef3c7', sortOrder: 1, subcategories: ['Wiring', 'Breaker & DB', 'UPS & Inverter', 'Solar Setup', 'LED & Fan'] },
-  { id: 'plumber', name: 'Plumber', subtitle: 'Leakage, Pipe Fitting, Motor & Tank', icon: '🔧', bg: '#dbeafe', sortOrder: 2, subcategories: ['Pipe Leakage', 'Water Motor', 'Bathroom Fitting', 'Geyser', 'Tank Cleaning'] },
-  { id: 'ac_tech', name: 'AC & Fridge', subtitle: 'AC Service, Gas Refill & Cooling Repair', icon: '❄️', bg: '#e0f2fe', sortOrder: 3, subcategories: ['AC Service', 'Gas Refill', 'Inverter PCB', 'Fridge Repair', 'Installation'] },
-  { id: 'carpenter', name: 'Carpenter', subtitle: 'Furniture, Doors, Locks & Cabinets', icon: '🪚', bg: '#ffedd5', sortOrder: 4, subcategories: ['Door Lock', 'Furniture Repair', 'Kitchen Cabinets', 'Polishing', 'Custom Wood'] },
-  { id: 'mechanic', name: 'Auto Mechanic', subtitle: 'Car, Bike, Hybrid & Roadside Rescue', icon: '🚗', bg: '#fee2e2', sortOrder: 5, subcategories: ['Car Tuning', 'Bike Mechanic', 'AC & Battery', 'Roadside Rescue', 'Denting'] },
-  { id: 'it_tech', name: 'IT & Computer', subtitle: 'Laptop, Wi-Fi, Printers & Networking', icon: '💻', bg: '#ede9fe', sortOrder: 6, subcategories: ['Laptop Repair', 'Windows & Software', 'Wi-Fi & Router', 'Printer Setup', 'Data Recovery'] },
-  { id: 'cctv', name: 'CCTV & Security', subtitle: 'IP Cameras, DVR/NVR & Smart Locks', icon: '📹', bg: '#e2e8f0', sortOrder: 7, subcategories: ['CCTV Install', 'DVR/NVR Config', 'Biometric Lock', 'Intercom', 'Maintenance'] },
-  { id: 'painter', name: 'Painter', subtitle: 'Interior, Exterior, Texture & Polish', icon: '🎨', bg: '#fce7f3', sortOrder: 8, subcategories: ['Interior Paint', 'Exterior Weather', 'Wall Texture', 'Wood Polish', 'Waterproofing'] },
-  { id: 'mason', name: 'Mason & Civil', subtitle: 'Tiles, Marble, Plaster & Renovation', icon: '🧱', bg: '#fef2f2', sortOrder: 9, subcategories: ['Tile Fixing', 'Marble Polish', 'Plaster Work', 'Roof Seepage', 'Renovation'] },
-  { id: 'cleaner', name: 'Home Cleaning', subtitle: 'Deep Clean, Sofa, Carpet & Tank Wash', icon: '🧹', bg: '#dcfce7', sortOrder: 10, subcategories: ['Deep Cleaning', 'Sofa & Carpet', 'Water Tank', 'Kitchen Degrease', 'Move-in Clean'] },
-  { id: 'appliance', name: 'Appliance Repair', subtitle: 'Washing Machine, Microwave & Oven', icon: '🔌', bg: '#ecfeff', sortOrder: 11, subcategories: ['Washing Machine', 'Microwave', 'Dispenser', 'Kitchen Hood', 'LED TV'] },
-  { id: 'welder', name: 'Welder & Steel', subtitle: 'Gates, Grills, Sheds & Iron Works', icon: '🔥', bg: '#ffedd5', sortOrder: 12, subcategories: ['Main Gate', 'Window Grills', 'Roof Shed', 'Stainless Steel', 'On-site Weld'] },
-  { id: 'gardener', name: 'Gardener', subtitle: 'Lawn Care, Landscaping & Pruning', icon: '🌿', bg: '#dcfce7', sortOrder: 13, subcategories: ['Lawn Mowing', 'Landscaping', 'Tree Pruning', 'Pest Spray', 'Indoor Plants'] },
-  { id: 'solar', name: 'Solar Energy', subtitle: 'Hybrid Inverters, Panels & Net Metering', icon: '☀️', bg: '#fef9c3', sortOrder: 14, subcategories: ['Hybrid System', 'Panel Cleaning', 'Net Metering', 'Battery Bank', 'Fault Check'] },
-  { id: 'driver', name: 'Driver & Valet', subtitle: 'Family Driver, Pick & Drop, Outstation', icon: '🚘', bg: '#e0e7ff', sortOrder: 15, subcategories: ['Daily Driver', 'Outstation', 'Pick & Drop', 'Event Valet', 'Commercial'] },
-  { id: 'tutor', name: 'Home Tutor', subtitle: 'Matric, O/A Levels, Science & Spoken', icon: '📚', bg: '#fae8ff', sortOrder: 16, subcategories: ['Math & Physics', 'O/A Levels', 'Primary Tuition', 'Quran & Arabic', 'Spoken English'] },
-  { id: 'tailor', name: 'Tailor & Stitch', subtitle: 'Custom Suiting, Alterations & Ladies', icon: '🧵', bg: '#ffe4e6', sortOrder: 17, subcategories: ['Gents Suiting', 'Ladies Stitching', 'Alterations', 'Bridal Work', 'Curtains'] },
-  { id: 'mover', name: 'Movers & Shifting', subtitle: 'Home Shifting, Packing & Loader Van', icon: '🚚', bg: '#fef3c7', sortOrder: 18, subcategories: ['House Shifting', 'Office Move', 'Loader Pickup', 'Packing Crew', 'Heavy Lift'] },
-  { id: 'pest', name: 'Pest Control', subtitle: 'Termite, Bedbugs, Cockroach & Dengue', icon: '🛡️', bg: '#dcfce7', sortOrder: 19, subcategories: ['Termite Proof', 'Bedbugs', 'General Spray', 'Fumigation', 'Rodent Control'] },
-  { id: 'beauty', name: 'Salon at Home', subtitle: 'Haircut, Grooming, Makeup & Spa', icon: '✂️', bg: '#fce7f3', sortOrder: 20, subcategories: ['Men Grooming', 'Bridal Makeup', 'Facial & Spa', 'Hair Styling', 'Mehndi'] },
-  { id: 'photography', name: 'Photo & Events', subtitle: 'Events, Portraits, Video & Drone', icon: '📷', bg: '#e0f2fe', sortOrder: 21, subcategories: ['Wedding Shoot', 'Product Photo', 'Event Video', 'Drone Coverage', 'Editing'] }
+  {
+    id: 'home_technical',
+    name: 'Home & Technical Services',
+    subtitle: 'Electrician, Plumber, Carpenter, AC, Welder, Generator & Lift',
+    icon: '🛠️',
+    bg: '#fef3c7',
+    sortOrder: 1,
+    subcategories: [
+      'Electrician',
+      'Plumber',
+      'Carpenter',
+      'Painter',
+      'AC Technician',
+      'Appliance Repair Technician',
+      'Welder',
+      'Generator Technician',
+      'Lift Technician'
+    ]
+  },
+  {
+    id: 'solar_electrical',
+    name: 'Solar & Electrical Systems',
+    subtitle: 'Solar Panels, Installation, UPS & Hybrid Inverters',
+    icon: '☀️',
+    bg: '#fef9c3',
+    sortOrder: 2,
+    subcategories: [
+      'Solar Technician',
+      'Solar Installer',
+      'UPS Technician',
+      'Inverter Technician'
+    ]
+  },
+  {
+    id: 'it_security',
+    name: 'IT & Security Services',
+    subtitle: 'IT Support, Networking, CCTV, Computer & Mobile Repair',
+    icon: '💻',
+    bg: '#ede9fe',
+    sortOrder: 3,
+    subcategories: [
+      'IT Support Expert',
+      'Network Technician',
+      'CCTV Technician',
+      'Computer Repair Technician',
+      'Mobile Repair Technician',
+      'Software / Application Support'
+    ]
+  },
+  {
+    id: 'construction_engineering',
+    name: 'Construction & Engineering',
+    subtitle: 'Civil Engineer, Architect, Contractor, Mason, Tile & Steel Fixer',
+    icon: '🧱',
+    bg: '#fee2e2',
+    sortOrder: 4,
+    subcategories: [
+      'Civil Engineer',
+      'Architect',
+      'Construction Contractor',
+      'Mason / Bricklayer',
+      'Tile Fixer',
+      'Steel Fixer',
+      'General Labour',
+      'Construction Worker'
+    ]
+  },
+  {
+    id: 'education_tutors',
+    name: 'Education & Tutors',
+    subtitle: 'Home Tutor, School, Quran, English, Computer & Online Tuition',
+    icon: '📚',
+    bg: '#fae8ff',
+    sortOrder: 5,
+    subcategories: [
+      'Home Tutor',
+      'School Teacher',
+      'Quran Teacher',
+      'English Language Tutor',
+      'Computer Teacher',
+      'Online Tutor',
+      'Academy / Coaching Teacher'
+    ]
+  },
+  {
+    id: 'gardening_outdoor',
+    name: 'Gardening & Outdoor Services',
+    subtitle: 'Gardener, Landscaping, Plant Care, Lawn & Tree Trimming',
+    icon: '🌿',
+    bg: '#dcfce7',
+    sortOrder: 6,
+    subcategories: [
+      'Gardener',
+      'Landscaping Expert',
+      'Plant Care Specialist',
+      'Lawn Maintenance',
+      'Tree Trimming'
+    ]
+  },
+  {
+    id: 'shops_suppliers',
+    name: 'Shops & Local Suppliers',
+    subtitle: 'Mineral Water Shops, Delivery, Tank Cleaning & RO Filter Tech',
+    icon: '💧',
+    bg: '#e0f2fe',
+    sortOrder: 7,
+    subcategories: [
+      'Mineral Water Shop',
+      'Mineral Water Delivery',
+      'Drinking Water Supplier',
+      'Water Tank Cleaning',
+      'Water Filter / RO Technician'
+    ]
+  },
+  {
+    id: 'automotive_services',
+    name: 'Automotive Services',
+    subtitle: 'Car & Bike Mechanics, Auto Electrician, Car AC & Diagnostics',
+    icon: '🚗',
+    bg: '#ffedd5',
+    sortOrder: 8,
+    subcategories: [
+      'Car Mechanic',
+      'Motorcycle Mechanic',
+      'Auto Electrician',
+      'Car AC Technician',
+      'Vehicle Diagnostic Expert'
+    ]
+  }
 ];
+
+const LEGACY_CATEGORY_MAP = {
+  electrician: 'home_technical',
+  plumber: 'home_technical',
+  ac_tech: 'home_technical',
+  carpenter: 'home_technical',
+  painter: 'home_technical',
+  appliance: 'home_technical',
+  welder: 'home_technical',
+  cleaner: 'home_technical',
+  pest: 'home_technical',
+  tailor: 'home_technical',
+  beauty: 'home_technical',
+  photography: 'home_technical',
+  solar: 'solar_electrical',
+  it_tech: 'it_security',
+  cctv: 'it_security',
+  mason: 'construction_engineering',
+  tutor: 'education_tutors',
+  gardener: 'gardening_outdoor',
+  water_supplier: 'shops_suppliers',
+  mechanic: 'automotive_services',
+  driver: 'automotive_services',
+  mover: 'automotive_services'
+};
+
+function normalizeCategoryGroupId(rawCategoryId) {
+  const id = String(rawCategoryId || '').trim().toLowerCase();
+  if (DEFAULT_CATEGORIES.some((c) => c.id === id)) return id;
+  return LEGACY_CATEGORY_MAP[id] || id || 'home_technical';
+}
 
 const BANNER_PRESET_IMAGES = [
   { label: 'Hero Tech', path: 'assets/images/mobile/img_hero_technician.jpg' },
@@ -193,8 +334,8 @@ function makeInitialSeedData() {
         id: 'tech_ali_raza',
         userId: 'tech_ali_raza',
         fullName: 'Ali Raza',
-        categoryId: 'electrician',
-        subcategory: 'UPS & Inverter',
+        categoryId: 'solar_electrical',
+        subcategory: 'UPS Technician',
         expertise: 'UPS, Solar Inverter & 3-Phase Wiring Specialist',
         bio: '9 years residential & commercial electrical troubleshooting across Gulshan and Clifton.',
         yearsExperience: 9,
@@ -220,8 +361,8 @@ function makeInitialSeedData() {
         id: 'tech_bilal_ahmed',
         userId: 'tech_bilal_ahmed',
         fullName: 'Bilal Ahmed',
-        categoryId: 'plumber',
-        subcategory: 'Pipe Leakage',
+        categoryId: 'home_technical',
+        subcategory: 'Plumber',
         expertise: 'PPRC Pipe Fitting, Water Motor & Bathroom Renovation',
         bio: 'Fast pressure testing and concealed leak detection without breaking tiles.',
         yearsExperience: 7,
@@ -247,8 +388,8 @@ function makeInitialSeedData() {
         id: 'tech_usman_ac',
         userId: 'tech_usman_ac',
         fullName: 'Usman Tariq',
-        categoryId: 'ac_tech',
-        subcategory: 'Inverter PCB',
+        categoryId: 'home_technical',
+        subcategory: 'AC Technician',
         expertise: 'Split AC Master Service, Gas R410A & Inverter PCB',
         bio: 'Same-day cooling restore and coil jet wash with warranty.',
         yearsExperience: 6,
@@ -274,8 +415,8 @@ function makeInitialSeedData() {
         id: 'tech_pending_kamran',
         userId: 'tech_pending_kamran',
         fullName: 'Kamran Siddiqui',
-        categoryId: 'electrician',
-        subcategory: 'Solar Setup',
+        categoryId: 'solar_electrical',
+        subcategory: 'Solar Technician',
         expertise: 'Domestic Wiring, Breaker Panel & Solar Hybrid Inverter',
         bio: 'Newly applied Skill Person awaiting laptop admin approval.',
         yearsExperience: 4,
@@ -302,8 +443,8 @@ function makeInitialSeedData() {
         id: 'tech_pending_farhan',
         userId: 'tech_pending_farhan',
         fullName: 'Farhan Mechanic',
-        categoryId: 'mechanic',
-        subcategory: 'Car Tuning',
+        categoryId: 'automotive_services',
+        subcategory: 'Car Mechanic',
         expertise: 'EFI Car Scanning, Hybrid Battery & Roadside Rescue',
         bio: 'Mobile car diagnostic specialist.',
         yearsExperience: 8,
@@ -537,7 +678,7 @@ const state = {
   mobileView: 'home', // home | categories | map | bookings | profile | subscription | prohub | notifications
   mobileLocation: CITIES[0],
   mobileSearch: '',
-  selectedCategoryId: 'electrician',
+  selectedCategoryId: 'home_technical',
   selectedSubcategory: 'All',
   categorySearch: '',
   selectedMapTechId: 'tech_ali_raza',
@@ -657,9 +798,11 @@ function statusBadgeClass(status) {
 }
 
 function categoryMeta(categoryId) {
+  const normId = normalizeCategoryGroupId(categoryId);
   return (
     getCategories().find((c) => c.id === categoryId || c.categoryId === categoryId) ||
-    DEFAULT_CATEGORIES.find((c) => c.id === categoryId) || {
+    getCategories().find((c) => c.id === normId || c.categoryId === normId) ||
+    DEFAULT_CATEGORIES.find((c) => c.id === normId) || {
       id: categoryId,
       name: categoryId || 'Service',
       icon: '🔧',
@@ -733,30 +876,34 @@ function compressImageFileToDataUrl(file, maxWidth = 880, maxChars = 155000) {
 function updateAuthUi() {
   const pillDot = document.getElementById('firebaseStatusDot');
   const pillText = document.getElementById('firebaseStatusText');
-  const signInBtn = document.getElementById('adminGoogleSignInBtn');
+  const googleBtn = document.getElementById('adminGoogleSignInBtn');
+  const emailBtn = document.getElementById('adminEmailSignInBtn');
   const signOutBtn = document.getElementById('adminSignOutBtn');
   const summaryEl = document.getElementById('adminAccountSummary');
 
   if (state.isLiveAdmin && state.authUser) {
     pillDot.classList.remove('offline');
     pillText.textContent = `Live Firestore Admin (${state.authUser.email})`;
-    signInBtn.classList.add('hidden');
-    signOutBtn.classList.remove('hidden');
+    googleBtn?.classList.add('hidden');
+    emailBtn?.classList.add('hidden');
+    signOutBtn?.classList.remove('hidden');
     summaryEl.textContent = `${state.authUser.email} • Live`;
     hideNotice();
   } else if (state.authUser) {
     pillDot.classList.add('offline');
-    pillText.textContent = `Signed in (${state.authUser.email}) — Read-only`;
-    signInBtn.classList.add('hidden');
-    signOutBtn.classList.remove('hidden');
-    summaryEl.textContent = `Non-admin (${state.authUser.email})`;
+    pillText.textContent = `Signed in (${state.authUser.email}) — Not Admin`;
+    googleBtn?.classList.add('hidden');
+    emailBtn?.classList.add('hidden');
+    signOutBtn?.classList.remove('hidden');
+    summaryEl.textContent = `Admin: ${ADMIN_EMAIL}`;
   } else {
     pillDot.classList.add('offline');
     pillText.textContent = state.publicSynced
       ? 'Live Public Read + Local Preview Admin'
       : 'Preview Mode (Sign in to sync Firestore)';
-    signInBtn.classList.remove('hidden');
-    signOutBtn.classList.add('hidden');
+    googleBtn?.classList.remove('hidden');
+    emailBtn?.classList.remove('hidden');
+    signOutBtn?.classList.add('hidden');
     summaryEl.textContent = `${ADMIN_EMAIL} (Preview Mode)`;
   }
 }
@@ -871,9 +1018,22 @@ function initFirebaseAuth() {
       };
       startPublicListeners();
       if (user) {
-        showNotice(
-          `<span>Signed in as <strong>${esc(user.email)}</strong>. Admin write actions require verified Super Admin Google account <strong>${ADMIN_EMAIL}</strong>. Using local preview mode for admin edits.</span>`
-        );
+        const isUnverifiedAdminEmail =
+          String(user.email || '').toLowerCase() === ADMIN_EMAIL && !user.emailVerified;
+        if (isUnverifiedAdminEmail) {
+          showNotice(
+            `<span>Signed in as <strong>${esc(user.email)}</strong>, but email verification is pending. Verify your email so Firestore Admin rules unlock.</span>
+             <button type="button" class="btn btn-outline btn-sm" id="sendAdminVerifyBtn">Send Verification Email</button>`
+          );
+          document.getElementById('sendAdminVerifyBtn')?.addEventListener('click', async () => {
+            await sendAdminVerificationEmail(user);
+            showToast(`Verification link sent to ${user.email}`);
+          });
+        } else {
+          showNotice(
+            `<span>Signed in as <strong>${esc(user.email)}</strong> (Technician / Customer test account kept separate). To unlock live Admin writes, sign out and sign in with <strong>${ADMIN_EMAIL}</strong>.</span>`
+          );
+        }
       } else {
         hideNotice();
       }
@@ -903,6 +1063,50 @@ async function handleGoogleSignIn() {
       showNotice(`Google Sign-In failed: ${esc(err.message || code)}`, true);
     }
   }
+}
+
+function openAdminEmailLoginModal() {
+  openAdminModal(`
+    <div class="modal-header">
+      <h3>Laptop Admin Sign-In</h3>
+      <button type="button" class="modal-close-btn" id="closeAdminModalBtn">&times;</button>
+    </div>
+    <p style="margin:0;font-size:12.5px;color:#475569;">
+      Sign in with the dedicated Admin account <strong>${esc(ADMIN_EMAIL)}</strong> to keep your mobile technician test account (<code>orionfxservis@gmail.com</code>) separate.
+    </p>
+    <form id="adminEmailLoginForm" style="display:flex;flex-direction:column;gap:10px;">
+      <label class="field-label">
+        Admin Email
+        <input type="email" id="adminLoginEmail" class="field-input" value="${esc(ADMIN_EMAIL)}" required />
+      </label>
+      <label class="field-label">
+        Password
+        <input type="password" id="adminLoginPassword" class="field-input" placeholder="Enter Firebase Auth password" required />
+      </label>
+      <div id="adminLoginErr" style="font-size:12px;color:#b91c1c;" class="hidden"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+        <button type="button" class="btn btn-outline" id="cancelAdminLoginBtn">Cancel</button>
+        <button type="submit" class="btn btn-primary">Sign In as Admin</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('closeAdminModalBtn')?.addEventListener('click', closeAdminModal);
+  document.getElementById('cancelAdminLoginBtn')?.addEventListener('click', closeAdminModal);
+  document.getElementById('adminEmailLoginForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errBox = document.getElementById('adminLoginErr');
+    errBox.classList.add('hidden');
+    try {
+      await signInAdminWithEmailPassword(
+        document.getElementById('adminLoginEmail').value,
+        document.getElementById('adminLoginPassword').value
+      );
+      closeAdminModal();
+    } catch (err) {
+      errBox.textContent = err?.message || 'Sign-in failed. Ensure Email/Password user exists in Firebase Console Authentication.';
+      errBox.classList.remove('hidden');
+    }
+  });
 }
 
 /* ==================== ADMIN MODALS ==================== */
@@ -2666,16 +2870,16 @@ function renderAdminCategories(root) {
   root.innerHTML = `
     <div class="pane-header">
       <div>
-        <h2>Service Categories (${categories.length})</h2>
-        <p>Manage categories shown on the Mobile Home carousel and targetable by Category Page banners</p>
+        <h2>Main Service Groups &amp; Subcategories (${categories.length})</h2>
+        <p>Organized into 8 main groups and subcategories for Pakistan service discovery &amp; Category Page banners</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${
           state.isLiveAdmin
-            ? `<button type="button" class="btn btn-outline" id="seedCategoriesBtn">Sync 21 Default Categories</button>`
+            ? `<button type="button" class="btn btn-outline" id="seedCategoriesBtn">Sync 8 Main Groups to Firestore</button>`
             : ''
         }
-        <button type="button" class="btn btn-primary" id="addCategoryBtn">+ Add Category</button>
+        <button type="button" class="btn btn-primary" id="addCategoryBtn">+ Add Service Group</button>
       </div>
     </div>
 
@@ -2689,15 +2893,17 @@ function renderAdminCategories(root) {
                 <div class="sc-cat-icon-circle" style="background:${esc(c.bg || '#dcfce7')};">${esc(c.icon || '🔧')}</div>
                 <div>
                   <strong style="font-size:14px;">${esc(c.name)}</strong>
-                  <div style="font-size:11.5px;color:#64748b;">#${c.sortOrder || 1} &bull; ${esc(c.id)}</div>
+                  <div style="font-size:11.5px;color:#64748b;">Group #${c.sortOrder || 1} &bull; ${(c.subcategories || []).length} subcategories</div>
                 </div>
               </div>
               <span class="badge ${c.active !== false ? 'badge-green' : 'badge-gray'}">${c.active !== false ? 'Active' : 'Hidden'}</span>
             </div>
             <div style="font-size:12px;color:#475569;">${esc(c.subtitle || '')}</div>
-            <div style="font-size:11px;color:#64748b;">${(c.subcategories || []).map(esc).join(' &bull; ')}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${(c.subcategories || []).map((s) => `<span class="badge badge-gray">${esc(s)}</span>`).join('')}
+            </div>
             <div style="display:flex;gap:8px;margin-top:auto;">
-              <button type="button" class="btn btn-outline btn-sm" data-edit-cat="${esc(c.id)}">Edit</button>
+              <button type="button" class="btn btn-outline btn-sm" data-edit-cat="${esc(c.id)}">Edit Group</button>
               <button type="button" class="btn btn-outline btn-sm" data-open-cat-phone="${esc(c.id)}">View in Mobile App</button>
             </div>
           </div>`
@@ -2709,7 +2915,7 @@ function renderAdminCategories(root) {
   document.getElementById('addCategoryBtn')?.addEventListener('click', () => openCategoryEditorModal(null));
   document.getElementById('seedCategoriesBtn')?.addEventListener('click', async () => {
     const added = await seedCategoriesList(DEFAULT_CATEGORIES);
-    showToast(added ? `Synced ${added} missing categories` : 'All 21 categories already synced');
+    showToast(added ? `Synced ${added} Main Service Groups` : 'All 8 Main Service Groups already synced');
   });
   root.querySelectorAll('[data-edit-cat]').forEach((btn) =>
     btn.addEventListener('click', () => {
@@ -2888,8 +3094,9 @@ function getActiveBannersForHome() {
 }
 
 function getActiveBannersForCategory(categoryId) {
+  const normId = normalizeCategoryGroupId(categoryId);
   const all = getBanners().filter((b) => b.active !== false && b.placement === 'CATEGORY');
-  const targeted = all.filter((b) => b.categoryId === categoryId);
+  const targeted = all.filter((b) => b.categoryId === categoryId || b.categoryId === normId);
   const shared = all.filter((b) => b.categoryId === 'all');
   const merged = [...targeted, ...shared];
   return merged.length ? merged : makeInitialSeedData().banners.filter((b) => b.placement === 'CATEGORY');
@@ -2901,7 +3108,7 @@ function handleBannerCtaAction(action) {
   if (a === 'subscription') return navigateMobile('subscription');
   if (a === 'prohub') return navigateMobile('prohub');
   if (a.startsWith('cat:')) return openCategoryInMobile(a.slice(4));
-  openCategoryInMobile(state.selectedCategoryId || 'electrician');
+  openCategoryInMobile(state.selectedCategoryId || 'home_technical');
 }
 
 function renderBannerCarousel(cardEl, dotsEl, slides, indexKey) {
@@ -3091,7 +3298,10 @@ function renderMobileHome() {
       (c) => `
       <button type="button" class="sc-cat-tile" data-cat-id="${esc(c.id)}">
         <span class="sc-cat-icon-circle" style="background:${esc(c.bg || '#dcfce7')};">${esc(c.icon || '🔧')}</span>
-        <span class="sc-cat-label">${esc(c.name)}</span>
+        <span class="sc-cat-meta">
+          <span class="sc-cat-label">${esc(c.name)}</span>
+          <span class="sc-cat-subcount">${(c.subcategories || []).length} services</span>
+        </span>
       </button>`
     )
     .join('');
@@ -3118,9 +3328,17 @@ function renderMobileCategoryPage() {
   const q = state.categorySearch.trim().toLowerCase();
   const techs = getTechnicians()
     .filter((t) => t.listed !== false && t.verificationStatus !== 'REJECTED')
-    .filter((t) => t.categoryId === cat.id)
-    .filter((t) => state.selectedSubcategory === 'All' || t.subcategory === state.selectedSubcategory)
-    .filter((t) => !q || [t.fullName, t.contactPhone, t.workingArea, t.expertise].join(' ').toLowerCase().includes(q))
+    .filter((t) => t.categoryId === cat.id || normalizeCategoryGroupId(t.categoryId) === cat.id)
+    .filter((t) => {
+      if (state.selectedSubcategory === 'All') return true;
+      const subLower = state.selectedSubcategory.toLowerCase();
+      return (
+        String(t.subcategory || '').toLowerCase().includes(subLower) ||
+        subLower.includes(String(t.subcategory || '').toLowerCase()) ||
+        String(t.expertise || '').toLowerCase().includes(subLower.split(' ')[0])
+      );
+    })
+    .filter((t) => !q || [t.fullName, t.contactPhone, t.workingArea, t.expertise, t.subcategory].join(' ').toLowerCase().includes(q))
     .sort(
       (a, b) =>
         Number(haversineKm(state.mobileLocation.lat, state.mobileLocation.lng, a.latitude, a.longitude)) -
@@ -3295,7 +3513,7 @@ function renderMobileSubscription() {
       <div style="font-size:20px;font-weight:800;">Rs. 0 <span style="font-size:12px;font-weight:500;color:#64748b;">/ month</span></div>
       <ul style="margin:0;padding-left:18px;font-size:12px;color:#334155;line-height:1.6;">
         <li>5 confirmed service bookings per month</li>
-        <li>Browse all 21 SkillConnect categories</li>
+        <li>Browse all 8 SkillConnect service groups</li>
         <li>Live GPS nearby search &amp; direct call</li>
       </ul>
     </div>
@@ -3485,6 +3703,7 @@ function renderAll() {
 function bindStaticListeners() {
   /* Auth & Topbar */
   document.getElementById('adminGoogleSignInBtn')?.addEventListener('click', handleGoogleSignIn);
+  document.getElementById('adminEmailSignInBtn')?.addEventListener('click', openAdminEmailLoginModal);
   document.getElementById('adminSignOutBtn')?.addEventListener('click', () => signOutAdmin());
   document.getElementById('toggleMobileShowcaseBtn')?.addEventListener('click', () => {
     const pane = document.getElementById('mobileShowcasePane');
@@ -3549,13 +3768,6 @@ function bindStaticListeners() {
     state.mobileSearch = '';
     document.getElementById('searchInput').value = '';
     renderMobileHome();
-  });
-
-  document.getElementById('catScrollLeftBtn')?.addEventListener('click', () => {
-    document.getElementById('categoriesCarousel')?.scrollBy({ left: -170, behavior: 'smooth' });
-  });
-  document.getElementById('catScrollRightBtn')?.addEventListener('click', () => {
-    document.getElementById('categoriesCarousel')?.scrollBy({ left: 170, behavior: 'smooth' });
   });
 
   document.getElementById('categoryBackBtn')?.addEventListener('click', () => navigateMobile('home'));

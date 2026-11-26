@@ -1192,33 +1192,26 @@ select {
   cursor: pointer;
 }
 
-.sc-categories-carousel {
+.sc-categories-grid {
   display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(3, 82px);
-  grid-auto-columns: 78px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  overflow-x: auto;
   padding: 2px 14px 4px;
-  scrollbar-width: none;
-}
-
-.sc-categories-carousel::-webkit-scrollbar {
-  display: none;
 }
 
 .sc-cat-tile {
   border: 1px solid #d7e8de;
-  border-radius: 14px;
+  border-radius: 13px;
   background: #ffffff;
-  padding: 6px 4px;
+  padding: 8px 9px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
+  justify-content: flex-start;
+  gap: 8px;
   cursor: pointer;
-  text-align: center;
+  text-align: left;
+  min-height: 54px;
 }
 
 .sc-cat-tile:hover {
@@ -1227,24 +1220,41 @@ select {
 }
 
 .sc-cat-icon-circle {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.sc-cat-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .sc-cat-label {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1.15;
   color: var(--sc-text-dark);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.sc-cat-subcount {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--sc-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ==================== PROMOTIONAL BANNER CARD (EXACT 148dp + DOTS) ==================== */

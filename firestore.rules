@@ -17,7 +17,7 @@ service cloud.firestore {
              'email_verified' in request.auth.token &&
              request.auth.token.email_verified == true &&
              'email' in request.auth.token &&
-             request.auth.token.email == 'orionfxservis@gmail.com';
+             request.auth.token.email == 'admin-skillconnect@orionfx.net';
     }
 
     // Use isAdmin() only in single-document get/create/update/delete; use isBootstrappedAdmin() in allow list

@@ -9,6 +9,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
   signOut,
   onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
@@ -28,7 +30,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-export const ADMIN_EMAIL = 'orionfxservis@gmail.com';
+export const ADMIN_EMAIL = 'admin-skillconnect@orionfx.net';
 export const FIRESTORE_DATABASE_ID = 'ai-studio-android-fixnear-1e2833ef-438f-432a-bea1-b8878edb9181';
 
 const FIREBASE_CONFIG = {
@@ -61,6 +63,17 @@ export function subscribeAuthState(callback) {
 export async function signInAdminWithGoogle() {
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
+}
+
+export async function signInAdminWithEmailPassword(email, password) {
+  const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+  return result.user;
+}
+
+export async function sendAdminVerificationEmail(user) {
+  if (user && !user.emailVerified) {
+    await sendEmailVerification(user);
+  }
 }
 
 export async function signOutAdmin() {

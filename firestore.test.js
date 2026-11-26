@@ -211,12 +211,31 @@ test("Users cannot self-assign ADMIN role, can save favorite technicians, and em
 
   // Spoofed admin email with email_verified = false must fail admin-only category write
   const spoofAdminDb = testEnv.authenticatedContext("spoof_uid", {
-    email: "orionfxservis@gmail.com",
+    email: "admin-skillconnect@orionfx.net",
     email_verified: false,
   }).firestore();
   const ts = pastDate(2000);
   await assertFails(
     spoofAdminDb.collection("categories").doc("drone_repair").set({
+      categoryId: "drone_repair",
+      name: "Drone Repair",
+      subtitle: "Gimbal and motor fixes",
+      iconKey: "build",
+      subcategories: ["Gimbal"],
+      active: true,
+      sortOrder: 25,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Separate technician test account (orionfxservis@gmail.com) must NOT have admin privileges
+  const techTesterDb = testEnv.authenticatedContext("tech_tester_uid", {
+    email: "orionfxservis@gmail.com",
+    email_verified: true,
+  }).firestore();
+  await assertFails(
+    techTesterDb.collection("categories").doc("drone_repair").set({
       categoryId: "drone_repair",
       name: "Drone Repair",
       subtitle: "Gimbal and motor fixes",
@@ -234,7 +253,7 @@ test("Provider enrollment blocks self-approval, isolates CNIC & certificate PII,
   const techDb = testEnv.authenticatedContext(TECH_UID).firestore();
   const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
   const adminDb = testEnv.authenticatedContext(ADMIN_UID, {
-    email: "orionfxservis@gmail.com",
+    email: "admin-skillconnect@orionfx.net",
     email_verified: true,
   }).firestore();
 
@@ -302,7 +321,7 @@ test("Booking, private chat, atomic review, and Super Admin complaint moderation
   const techDb = testEnv.authenticatedContext(TECH_UID).firestore();
   const otherDb = testEnv.authenticatedContext(OTHER_UID).firestore();
   const adminDb = testEnv.authenticatedContext(ADMIN_UID, {
-    email: "orionfxservis@gmail.com",
+    email: "admin-skillconnect@orionfx.net",
     email_verified: true,
   }).firestore();
 
@@ -377,7 +396,7 @@ test("Admin manages Home/Category banners, verifies Skill Person payments, and a
   const techDb = testEnv.authenticatedContext(TECH_UID).firestore();
   const otherDb = testEnv.authenticatedContext(OTHER_UID).firestore();
   const adminDb = testEnv.authenticatedContext(ADMIN_UID, {
-    email: "orionfxservis@gmail.com",
+    email: "admin-skillconnect@orionfx.net",
     email_verified: true,
   }).firestore();
   const ts = pastDate(2000);
@@ -487,7 +506,7 @@ test("Admin manages Home/Category banners, verifies Skill Person payments, and a
     adminDb.collection("payments").doc("pay_001").update({
       status: "APPROVED",
       adminRemarks: "Verified JazzCash receipt",
-      reviewedBy: "orionfxservis@gmail.com",
+      reviewedBy: "admin-skillconnect@orionfx.net",
       updatedAt: pastDate(1000),
     })
   );
