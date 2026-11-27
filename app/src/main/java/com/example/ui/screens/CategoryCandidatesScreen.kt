@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -165,6 +166,7 @@ fun CategoryCandidatesScreen(
 
   Scaffold(
     containerColor = LightBackground,
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       TopAppBar(
         colors =
@@ -313,18 +315,6 @@ fun CategoryCandidatesScreen(
 
           if (category.subcategories.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              item {
-                FilterChip(
-                  selected = selectedSub == null,
-                  onClick = { selectedSub = null },
-                  label = { Text("All (${category.name})") },
-                  colors =
-                    FilterChipDefaults.filterChipColors(
-                      selectedContainerColor = EmeraldContainer,
-                      selectedLabelColor = OnEmeraldContainer,
-                    ),
-                )
-              }
               items(category.subcategories) { sub ->
                 FilterChip(
                   selected = selectedSub == sub,
@@ -334,6 +324,10 @@ fun CategoryCandidatesScreen(
                     FilterChipDefaults.filterChipColors(
                       selectedContainerColor = EmeraldContainer,
                       selectedLabelColor = OnEmeraldContainer,
+                    ),
+                  modifier =
+                    Modifier.testTag(
+                      "subcategory_chip_${sub.lowercase().replace(Regex("[^a-z0-9]+"), "_")}"
                     ),
                 )
               }
@@ -410,7 +404,7 @@ fun CategoryCandidatesScreen(
                           },
                           shape = RoundedCornerShape(12.dp),
                         ) {
-                          Text("Show All ${category.name}")
+                          Text("Clear Filter")
                         }
                       } else {
                         Button(

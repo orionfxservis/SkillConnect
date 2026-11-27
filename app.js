@@ -26,12 +26,30 @@ import {
   saveCategoryEntity,
   seedCategoriesList,
   updateBookingStatusAdmin,
-  resolveComplaintAdmin
+  resolveComplaintAdmin,
+  newSupportConversationId,
+  newSupportMessageId,
+  subscribeUserSupportConversations,
+  subscribeSupportMessages,
+  uploadSupportAttachmentWeb,
+  createSupportConversationWeb,
+  sendSupportMessageWeb,
+  markSupportReadWeb,
+  updateSupportConversationAdminWeb
 } from './firebase-admin.js';
 
 const STORAGE_KEY = 'skillconnect_web_admin_v3';
 const APK_RELEASE_URL = 'https://github.com/orionfxservis/SkillConnect/releases/tag/preview-apk';
 const PRO_PLAN_ENABLED = false;
+const SUPPORT_CATEGORIES = [
+  'Booking Problem',
+  'Profile or Account Issue',
+  'Provider Verification',
+  'Subscription or Payment Issue',
+  'Location or GPS Problem',
+  'Technical Problem',
+  'Other Issue'
+];
 
 /* ==================== 8 MAIN SERVICE GROUPS & SUBCATEGORIES ==================== */
 const DEFAULT_CATEGORIES = [
@@ -675,15 +693,44 @@ const state = {
     subscriptions: null,
     payments: null,
     bookings: null,
-    complaints: null
+    complaints: null,
+    supportConversations: null
+  },
+
+  /* Support Chat & Admin Support Inbox State */
+  userSupportConversations: null,
+  activeSupportConvId: null,
+  mobileSupportCreatingNew: false,
+  newTicketCategory: SUPPORT_CATEGORIES[0],
+  newTicketDescription: '',
+  newTicketAttachment: null,
+  supportMessagesByConv: {},
+  pendingSupportFailed: [],
+  adminSupportSearch: '',
+  adminSupportStatusFilter: 'ALL',
+  adminActiveSupportConvId: null,
+  unsubUserSupport: null,
+  unsubMobileMessages: null,
+  unsubAdminMessages: null,
+  supportRecorder: {
+    target: null, // 'mobile_chat' | 'mobile_new' | 'admin_reply'
+    isRecording: false,
+    seconds: 0,
+    blob: null,
+    mime: 'audio/webm',
+    previewUrl: null,
+    duration: 0,
+    mediaRecorder: null,
+    stream: null,
+    timerId: null
   },
 
   /* Current Mobile App Showcase State */
-  mobileView: 'home', // home | categories | map | bookings | profile | subscription | prohub | notifications
+  mobileView: 'home', // home | categories | map | bookings | support | profile | subscription | prohub | notifications
   mobileLocation: CITIES[0],
   mobileSearch: '',
   selectedCategoryId: 'home_technical',
-  selectedSubcategory: 'All',
+  selectedSubcategory: null,
   categorySearch: '',
   selectedMapTechId: 'tech_ali_raza',
   homeBannerIndex: 0,
@@ -752,6 +799,27 @@ function getComplaints() {
   return state.liveCollections.complaints !== null
     ? state.liveCollections.complaints
     : state.data.complaints;
+}
+
+function getAdminSupportConversations() {
+  const list = state.liveCollections.supportConversations !== null
+    ? state.liveCollections.supportConversations
+    : state.data.supportConversations || [];
+  const rank = { Open: 0, Pending: 1, Resolved: 2 };
+  return [...list].sort((a, b) => {
+    const rDiff = (rank[a.status] ?? 3) - (rank[b.status] ?? 3);
+    if (rDiff !== 0) return rDiff;
+    return getMillis(b.lastMessageAt || b.updatedAt) - getMillis(a.lastMessageAt || a.updatedAt);
+  });
+}
+
+function getUserSupportConversations() {
+  const list = state.userSupportConversations !== null
+    ? state.userSupportConversations
+    : (state.data.supportConversations || []);
+  return [...list].sort(
+    (a, b) => getMillis(b.lastMessageAt || b.updatedAt) - getMillis(a.lastMessageAt || a.updatedAt)
+  );
 }
 
 /* ==================== UTILITIES ==================== */
@@ -1009,6 +1077,17 @@ function startAdminListeners() {
       state.liveCollections.subscriptions = docs;
       renderAll();
     },
+    onSupportConversations: (docs) => {
+      markSynced('support_conversations');
+      const prevUnread = (state.liveCollections.supportConversations || [])
+        .reduce((acc, c) => acc + Number(c.unreadCountAdmin || 0), 0);
+      const nextUnread = docs.reduce((acc, c) => acc + Number(c.unreadCountAdmin || 0), 0);
+      state.liveCollections.supportConversations = docs;
+      if (nextUnread > prevUnread && state.adminSection !== 'support_inbox') {
+        showToast('New message in Support Inbox');
+      }
+      renderAll();
+    },
     onError: (col, err) => {
       syncErrors.add(col);
       const list = Array.from(syncErrors).map((c) => `<strong>${esc(c)}</strong>`).join(', ');
@@ -1034,10 +1113,36 @@ function startAdminListeners() {
   });
 }
 
+function startUserSupportListener(user) {
+  if (state.unsubUserSupport) {
+    state.unsubUserSupport();
+    state.unsubUserSupport = null;
+  }
+  if (!user) {
+    state.userSupportConversations = null;
+    return;
+  }
+  state.unsubUserSupport = subscribeUserSupportConversations(
+    user.uid,
+    (docs) => {
+      const prevUnread = (state.userSupportConversations || [])
+        .reduce((acc, c) => acc + Number(c.unreadCountUser || 0), 0);
+      const nextUnread = docs.reduce((acc, c) => acc + Number(c.unreadCountUser || 0), 0);
+      state.userSupportConversations = docs;
+      if (nextUnread > prevUnread && state.mobileView !== 'support') {
+        showToast('New reply from SkillConnect Support');
+      }
+      renderAll();
+    },
+    () => {}
+  );
+}
+
 function initFirebaseAuth() {
   subscribeAuthState((user) => {
     state.authUser = user || null;
     state.isLiveAdmin = isAdminUser(user);
+    startUserSupportListener(user);
 
     if (state.isLiveAdmin) {
       hideNotice();
@@ -1052,7 +1157,8 @@ function initFirebaseAuth() {
         subscriptions: null,
         payments: null,
         bookings: null,
-        complaints: null
+        complaints: null,
+        supportConversations: null
       };
       startPublicListeners();
       if (user) {
@@ -2025,6 +2131,8 @@ function renderSidebarBadges() {
   ).length;
   const pendingPay = getPayments().filter((p) => p.status === 'PENDING').length;
   const openComp = getComplaints().filter((c) => c.status !== 'RESOLVED').length;
+  const supportUnread = getAdminSupportConversations()
+    .reduce((acc, c) => acc + Number(c.unreadCountAdmin || 0), 0);
 
   const setBadge = (id, count) => {
     const el = document.getElementById(id);
@@ -2036,6 +2144,7 @@ function renderSidebarBadges() {
   setBadge('badgePendingRenewals', pendingRen);
   setBadge('badgePendingPayments', pendingPay);
   setBadge('badgeOpenComplaints', openComp);
+  setBadge('badgeSupportUnread', supportUnread);
 
   document.querySelectorAll('.admin-nav-btn[data-admin-section]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.adminSection === state.adminSection);
@@ -2053,6 +2162,7 @@ function renderAdminPane() {
   if (state.adminSection === 'banners') return renderAdminBanners(root);
   if (state.adminSection === 'payments') return renderAdminPayments(root);
   if (state.adminSection === 'categories') return renderAdminCategories(root);
+  if (state.adminSection === 'support_inbox') return renderAdminSupportInbox(root);
   return renderAdminOperations(root);
 }
 
@@ -3096,6 +3206,534 @@ function renderAdminOperations(root) {
   );
 }
 
+/* ==================== SUPPORT CHAT SHARED HELPERS & ADMIN SUPPORT INBOX ==================== */
+function fmtTimeShort(ts) {
+  const n = getMillis(ts);
+  if (!n) return '';
+  return new Date(n).toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit' });
+}
+
+function fmtSeconds(sec) {
+  const s = Math.max(0, Number(sec) || 0);
+  const mins = Math.floor(s / 60);
+  const rem = String(s % 60).padStart(2, '0');
+  return `${mins}:${rem}`;
+}
+
+function supportStatusClass(status) {
+  const s = String(status || 'Open').toLowerCase();
+  if (s === 'resolved') return 'support-status-resolved';
+  if (s === 'pending') return 'support-status-pending';
+  return 'support-status-open';
+}
+
+function validateSupportFileWeb(file) {
+  if (!file) return 'No file selected.';
+  const mime = String(file.type || '').split(';')[0].trim().toLowerCase();
+  const allowedImg = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (allowedImg.includes(mime)) {
+    if (file.size > 5 * 1024 * 1024) return 'Image/screenshot must be 5 MB or smaller.';
+    return null;
+  }
+  if (mime === 'application/pdf') {
+    if (file.size > 10 * 1024 * 1024) return 'PDF document must be 10 MB or smaller.';
+    return null;
+  }
+  if (mime.startsWith('audio/')) {
+    if (file.size > 5 * 1024 * 1024) return 'Voice recording must be 5 MB or smaller.';
+    return null;
+  }
+  return 'Only JPG/PNG/WEBP images, PDF documents, and audio recordings are allowed.';
+}
+
+function ensureSupportMessagesSubscribed(convId, isAdminContext) {
+  const unsubKey = isAdminContext ? 'unsubAdminMessages' : 'unsubMobileMessages';
+  if (state[unsubKey]) {
+    state[unsubKey]();
+    state[unsubKey] = null;
+  }
+  if (!convId || !state.authUser) return;
+  state[unsubKey] = subscribeSupportMessages(
+    convId,
+    (docs) => {
+      const sorted = [...docs].sort((a, b) => getMillis(a.createdAt) - getMillis(b.createdAt));
+      state.supportMessagesByConv[convId] = sorted;
+      renderAll();
+    },
+    () => {}
+  );
+}
+
+function renderSupportMessageHtml(msg, viewerIsAdmin) {
+  const isOutgoing = viewerIsAdmin ? msg.senderRole === 'Admin' : msg.senderRole === 'User';
+  const senderLabel = isOutgoing ? 'You' : msg.senderRole === 'Admin' ? 'Support Team' : (msg.senderName || 'User');
+  const timeStr = fmtTimeShort(msg.createdAt || msg.createdAtMillis);
+  const type = String(msg.messageType || 'text').toLowerCase();
+
+  let bodyHtml = '';
+  if (type === 'voice') {
+    bodyHtml = `
+      <audio controls class="support-audio-player" src="${esc(msg.attachmentUrl)}"></audio>
+      <div style="font-size:11px;color:#475569;">Voice message &bull; ${fmtSeconds(msg.duration)}</div>
+      ${msg.text ? `<div>${esc(msg.text)}</div>` : ''}
+    `;
+  } else if (type === 'image') {
+    bodyHtml = `
+      ${msg.attachmentUrl ? `<img src="${esc(msg.attachmentUrl)}" alt="${esc(msg.attachmentName || 'Attachment')}" class="support-img-thumb" data-support-zoom-img="${esc(msg.attachmentUrl)}" />` : ''}
+      ${msg.text ? `<div>${esc(msg.text)}</div>` : ''}
+    `;
+  } else if (type === 'document') {
+    bodyHtml = `
+      <a href="${esc(msg.attachmentUrl)}" target="_blank" rel="noopener" class="support-doc-chip">
+        <span>&#128196;</span>
+        <span>${esc(msg.attachmentName || 'Document.pdf')} &mdash; Open PDF</span>
+      </a>
+      ${msg.text ? `<div>${esc(msg.text)}</div>` : ''}
+    `;
+  } else {
+    bodyHtml = `<div>${esc(msg.text)}</div>`;
+  }
+
+  return `
+    <div class="support-msg-row ${isOutgoing ? 'outgoing' : ''}">
+      <div class="support-bubble">${bodyHtml}</div>
+      <div class="support-msg-meta">${esc(senderLabel)}${timeStr ? ` &bull; ${esc(timeStr)}` : ''}${isOutgoing && msg.readAt ? ' &bull; Read' : ''}</div>
+    </div>
+  `;
+}
+
+function openSupportImageZoomModal(url) {
+  openAdminModal(`
+    <div class="modal-header">
+      <h3>Support Attachment</h3>
+      <button type="button" class="modal-close-btn" id="closeAdminModalBtn">&times;</button>
+    </div>
+    <img src="${esc(url)}" alt="Support image" style="width:100%;max-height:70vh;object-fit:contain;border-radius:12px;background:#0f172a;" />
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <a href="${esc(url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Open Full Size</a>
+    </div>
+  `);
+  document.getElementById('closeAdminModalBtn')?.addEventListener('click', closeAdminModal);
+}
+
+async function startWebVoiceRecording(target) {
+  clearWebVoiceDraft();
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    showToast('Audio recording is not supported in this browser.');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+    const chunks = [];
+    const mr = new MediaRecorder(stream, { mimeType });
+    mr.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+    mr.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: mimeType });
+      const previewUrl = URL.createObjectURL(blob);
+      const duration = Math.max(1, state.supportRecorder.seconds);
+      clearInterval(state.supportRecorder.timerId);
+      state.supportRecorder = {
+        target,
+        isRecording: false,
+        seconds: duration,
+        duration,
+        blob,
+        mime: mimeType,
+        previewUrl,
+        mediaRecorder: null,
+        stream: null,
+        timerId: null
+      };
+      renderAll();
+    };
+    mr.start();
+    const timerId = setInterval(() => {
+      if (!state.supportRecorder.isRecording) return;
+      state.supportRecorder.seconds += 1;
+      const label = document.querySelector('[data-voice-rec-timer="1"]');
+      if (label) label.textContent = `Recording ${fmtSeconds(state.supportRecorder.seconds)}`;
+    }, 1000);
+    state.supportRecorder = {
+      target,
+      isRecording: true,
+      seconds: 0,
+      duration: 0,
+      blob: null,
+      mime: mimeType,
+      previewUrl: null,
+      mediaRecorder: mr,
+      stream,
+      timerId
+    };
+    renderAll();
+  } catch (_) {
+    showToast('Microphone permission denied or unavailable.');
+  }
+}
+
+function stopWebVoiceRecording() {
+  if (state.supportRecorder.mediaRecorder && state.supportRecorder.isRecording) {
+    state.supportRecorder.mediaRecorder.stop();
+  }
+}
+
+function clearWebVoiceDraft() {
+  if (state.supportRecorder.timerId) clearInterval(state.supportRecorder.timerId);
+  if (state.supportRecorder.stream) state.supportRecorder.stream.getTracks().forEach((t) => t.stop());
+  if (state.supportRecorder.previewUrl) URL.revokeObjectURL(state.supportRecorder.previewUrl);
+  state.supportRecorder = {
+    target: null,
+    isRecording: false,
+    seconds: 0,
+    duration: 0,
+    blob: null,
+    mime: 'audio/webm',
+    previewUrl: null,
+    mediaRecorder: null,
+    stream: null,
+    timerId: null
+  };
+}
+
+function renderVoiceBarHtml(targetKey) {
+  const rec = state.supportRecorder;
+  if (rec.target !== targetKey || (!rec.isRecording && !rec.blob)) return '';
+  if (rec.isRecording) {
+    return `
+      <div class="support-voice-bar recording">
+        <div style="display:flex;align-items:center;gap:8px;color:#991b1b;font-weight:700;">
+          <span class="support-rec-dot"></span>
+          <span data-voice-rec-timer="1">Recording ${fmtSeconds(rec.seconds)}</span>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" id="stopVoiceRecBtn_${targetKey}">Stop</button>
+      </div>
+    `;
+  }
+  return `
+    <div class="support-voice-bar">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+        <audio controls class="support-audio-player" src="${esc(rec.previewUrl)}"></audio>
+        <span style="font-size:11px;font-weight:600;">${fmtSeconds(rec.duration)}</span>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button type="button" class="btn btn-outline btn-sm" id="delVoiceDraftBtn_${targetKey}">Delete</button>
+        <button type="button" class="btn btn-primary btn-sm" id="sendVoiceDraftBtn_${targetKey}">Send</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminSupportInbox(root) {
+  const allConvs = getAdminSupportConversations();
+  const q = state.adminSupportSearch.trim().toLowerCase();
+  const filtered = allConvs.filter((c) => {
+    const matchesStatus = state.adminSupportStatusFilter === 'ALL' || c.status === state.adminSupportStatusFilter;
+    const matchesSearch =
+      !q ||
+      String(c.userName || '').toLowerCase().includes(q) ||
+      String(c.userId || '').toLowerCase().includes(q) ||
+      String(c.issueCategory || '').toLowerCase().includes(q) ||
+      String(c.subject || '').toLowerCase().includes(q);
+    return matchesStatus && matchesSearch;
+  });
+
+  const activeConv =
+    filtered.find((c) => (c.conversationId || c.id) === state.adminActiveSupportConvId) ||
+    allConvs.find((c) => (c.conversationId || c.id) === state.adminActiveSupportConvId) ||
+    null;
+  const activeId = activeConv ? (activeConv.conversationId || activeConv.id) : null;
+  const activeMsgs = activeId ? (state.supportMessagesByConv[activeId] || []) : [];
+
+  if (activeConv && state.isLiveAdmin && (activeConv.unreadCountAdmin > 0 || activeMsgs.some((m) => m.senderRole === 'User' && !m.readAt))) {
+    markSupportReadWeb({ conversation: activeConv, messages: activeMsgs, viewerRole: 'Admin' }).catch(() => {});
+  }
+
+  root.innerHTML = `
+    <div class="pane-header">
+      <div>
+        <h2>Support Inbox</h2>
+        <p>View incoming customer &amp; provider tickets, update ticket status, listen to voice notes, and reply in real time</p>
+      </div>
+      ${!state.isLiveAdmin ? '<span class="badge badge-amber">Preview Mode (Sign in with Admin email for live Firestore sync)</span>' : ''}
+    </div>
+
+    <div class="support-inbox-split">
+      <div class="support-inbox-list-col">
+        <div style="padding:10px;border-bottom:1px solid #e2e8f0;display:flex;flex-direction:column;gap:8px;">
+          <input type="search" id="adminSupportSearchInput" class="field-input" placeholder="Search user name, UID or category..." value="${esc(state.adminSupportSearch)}" />
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            ${['ALL', 'Open', 'Pending', 'Resolved']
+              .map(
+                (st) => `
+                <button type="button" class="filter-chip ${state.adminSupportStatusFilter === st ? 'active' : ''}" data-support-status-filter="${st}">
+                  ${st} (${st === 'ALL' ? allConvs.length : allConvs.filter((x) => x.status === st).length})
+                </button>`
+              )
+              .join('')}
+          </div>
+        </div>
+        <div class="support-inbox-items">
+          ${
+            filtered.length
+              ? filtered
+                  .map((c) => {
+                    const cid = c.conversationId || c.id;
+                    return `
+                      <button type="button" class="support-conv-row ${cid === activeId ? 'active' : ''}" data-select-admin-conv="${esc(cid)}">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                          <strong style="font-size:13px;">${esc(c.userName || c.userId)}</strong>
+                          ${c.unreadCountAdmin > 0 ? `<span class="nav-badge">${c.unreadCountAdmin}</span>` : ''}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                          <span class="badge ${c.accountType === 'Service Provider' ? 'badge-amber' : 'badge-green'}">${esc(c.accountType || 'Customer')}</span>
+                          <span style="font-size:11px;color:#027245;font-weight:600;">${esc(c.issueCategory)}</span>
+                          <span class="support-status-badge ${supportStatusClass(c.status)}">${esc(c.status)}</span>
+                        </div>
+                        <div style="font-size:11.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.lastMessage || c.subject)}</div>
+                      </button>`;
+                  })
+                  .join('')
+              : '<div style="padding:18px;text-align:center;font-size:12.5px;color:#64748b;">No support conversations match your filters.</div>'
+          }
+        </div>
+      </div>
+
+      <div class="support-inbox-thread-col">
+        ${
+          activeConv
+            ? `<div style="padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center;">
+                 <div>
+                   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                     <strong style="font-size:14.5px;">${esc(activeConv.userName || 'SkillConnect User')}</strong>
+                     <span class="badge ${activeConv.accountType === 'Service Provider' ? 'badge-amber' : 'badge-green'}">${esc(activeConv.accountType || 'Customer')}</span>
+                     <span class="support-status-badge ${supportStatusClass(activeConv.status)}">${esc(activeConv.status)}</span>
+                   </div>
+                   <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                     ${esc(activeConv.issueCategory)} &bull; UID: <code>${esc(activeConv.userId)}</code>${activeConv.userEmail ? ` &bull; ${esc(activeConv.userEmail)}` : ''}
+                   </div>
+                 </div>
+                 <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                   <select id="adminConvStatusSelect" class="field-input" style="padding:5px 8px;font-size:12px;width:auto;">
+                     ${['Open', 'Pending', 'Resolved'].map((st) => `<option value="${st}" ${activeConv.status === st ? 'selected' : ''}>${st === 'Open' && activeConv.status === 'Resolved' ? 'Open (Reopen)' : st}</option>`).join('')}
+                   </select>
+                   <button type="button" class="btn btn-outline btn-sm" id="assignAdminSelfBtn">
+                     ${activeConv.assignedAdminId ? `Assigned: ${esc(activeConv.assignedAdminId)}` : 'Assign to Me'}
+                   </button>
+                 </div>
+               </div>
+
+               <div class="support-msg-stream" id="adminSupportMsgStream">
+                 ${
+                   activeMsgs.length
+                     ? activeMsgs.map((m) => renderSupportMessageHtml(m, true)).join('')
+                     : '<div style="text-align:center;color:#64748b;font-size:12.5px;margin-top:24px;">Loading conversation history...</div>'
+                 }
+               </div>
+
+               ${renderVoiceBarHtml('admin_reply')}
+
+               <form class="support-composer-pill" id="adminSupportReplyForm">
+                 <input type="file" id="adminSupportFileInput" accept="image/jpeg,image/png,image/webp,application/pdf" class="hidden" />
+                 <button type="button" class="support-icon-btn" id="adminSupportAttachBtn" title="Attach image or PDF">&#128206;</button>
+                 <input type="text" id="adminSupportReplyInput" class="support-pill-input" placeholder="Reply as SkillConnect Support Team..." autocomplete="off" />
+                 <button type="button" class="support-icon-btn ${state.supportRecorder.target === 'admin_reply' && state.supportRecorder.isRecording ? 'recording' : ''}" id="adminSupportMicBtn" title="Record voice reply">&#127908;</button>
+                 <button type="submit" class="btn btn-primary btn-sm">Send</button>
+               </form>`
+            : `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;color:#64748b;text-align:center;">
+                 <div style="font-size:32px;margin-bottom:8px;">&#128172;</div>
+                 <strong style="color:#0f172a;">Select a Support Conversation</strong>
+                 <p style="font-size:12.5px;margin:6px 0 0;max-width:320px;">Choose a ticket from the left list to read full history, play voice notes, inspect attachments, and reply.</p>
+               </div>`
+        }
+      </div>
+    </div>
+  `;
+
+  const msgStream = document.getElementById('adminSupportMsgStream');
+  if (msgStream) msgStream.scrollTop = msgStream.scrollHeight;
+
+  document.getElementById('adminSupportSearchInput')?.addEventListener('input', (e) => {
+    state.adminSupportSearch = e.target.value;
+    renderAdminSupportInbox(root);
+  });
+
+  root.querySelectorAll('[data-support-status-filter]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      state.adminSupportStatusFilter = btn.dataset.supportStatusFilter;
+      renderAdminSupportInbox(root);
+    })
+  );
+
+  root.querySelectorAll('[data-select-admin-conv]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      state.adminActiveSupportConvId = btn.dataset.selectAdminConv;
+      ensureSupportMessagesSubscribed(state.adminActiveSupportConvId, true);
+      renderAdminSupportInbox(root);
+    })
+  );
+
+  root.querySelectorAll('[data-support-zoom-img]').forEach((img) =>
+    img.addEventListener('click', () => openSupportImageZoomModal(img.dataset.supportZoomImg))
+  );
+
+  document.getElementById('adminConvStatusSelect')?.addEventListener('change', async (e) => {
+    if (!activeConv) return;
+    const status = e.target.value;
+    const assigned = activeConv.assignedAdminId || state.authUser?.email || ADMIN_EMAIL;
+    if (state.isLiveAdmin) {
+      await updateSupportConversationAdminWeb({ conversationId: activeId, status, assignedAdminId: assigned });
+    } else {
+      activeConv.status = status;
+      activeConv.assignedAdminId = assigned;
+      persistLocal();
+    }
+    showToast(`Ticket status updated to ${status}`);
+    renderAll();
+  });
+
+  document.getElementById('assignAdminSelfBtn')?.addEventListener('click', async () => {
+    if (!activeConv) return;
+    const assigned = state.authUser?.email || ADMIN_EMAIL;
+    if (state.isLiveAdmin) {
+      await updateSupportConversationAdminWeb({
+        conversationId: activeId,
+        status: activeConv.status,
+        assignedAdminId: assigned
+      });
+    } else {
+      activeConv.assignedAdminId = assigned;
+      persistLocal();
+    }
+    showToast(`Assigned to ${assigned}`);
+    renderAll();
+  });
+
+  const dispatchAdminReply = async ({ messageType, text, blobOrFile = null, fileName = '', mimeType = '', duration = 0 }) => {
+    if (!activeConv) return;
+    const msgId = newSupportMessageId();
+    try {
+      if (state.isLiveAdmin && state.authUser) {
+        let attachmentUrl = '';
+        let attachmentPath = '';
+        if (messageType !== 'text' && blobOrFile) {
+          const up = await uploadSupportAttachmentWeb({
+            conversationId: activeId,
+            ownerUid: activeConv.userId,
+            blobOrFile,
+            fileName,
+            mimeType
+          });
+          attachmentUrl = up.downloadUrl;
+          attachmentPath = up.storagePath;
+          mimeType = up.cleanMime;
+        }
+        await sendSupportMessageWeb({
+          conversation: activeConv,
+          messageId: msgId,
+          senderId: state.authUser.uid,
+          senderName: 'Support Team',
+          senderRole: 'Admin',
+          messageType,
+          text,
+          attachmentUrl,
+          attachmentPath,
+          attachmentName: fileName,
+          attachmentType: mimeType,
+          duration
+        });
+      } else {
+        const list = state.supportMessagesByConv[activeId] || [];
+        const localUrl = blobOrFile ? URL.createObjectURL(blobOrFile) : '';
+        list.push({
+          messageId: msgId,
+          conversationId: activeId,
+          senderRole: 'Admin',
+          senderName: 'Support Team',
+          messageType,
+          text,
+          attachmentUrl: localUrl,
+          attachmentName: fileName,
+          duration,
+          createdAtMillis: Date.now()
+        });
+        state.supportMessagesByConv[activeId] = list;
+        activeConv.lastMessage = text || messageType;
+        activeConv.unreadCountAdmin = 0;
+        activeConv.unreadCountUser = Number(activeConv.unreadCountUser || 0) + 1;
+        renderAll();
+      }
+    } catch (err) {
+      showToast(err?.message || 'Failed to send reply');
+    }
+  };
+
+  document.getElementById('adminSupportReplyForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('adminSupportReplyInput');
+    const txt = String(input?.value || '').trim();
+    if (!txt) return;
+    input.value = '';
+    await dispatchAdminReply({ messageType: 'text', text: txt });
+  });
+
+  document.getElementById('adminSupportAttachBtn')?.addEventListener('click', () => {
+    document.getElementById('adminSupportFileInput')?.click();
+  });
+
+  document.getElementById('adminSupportFileInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const err = validateSupportFileWeb(file);
+    if (err) {
+      showToast(err);
+      return;
+    }
+    const isPdf = file.type === 'application/pdf';
+    await dispatchAdminReply({
+      messageType: isPdf ? 'document' : 'image',
+      text: isPdf ? 'Sent PDF document' : 'Sent image',
+      blobOrFile: file,
+      fileName: file.name,
+      mimeType: file.type
+    });
+  });
+
+  document.getElementById('adminSupportMicBtn')?.addEventListener('click', () => {
+    if (state.supportRecorder.target === 'admin_reply' && state.supportRecorder.isRecording) {
+      stopWebVoiceRecording();
+    } else {
+      startWebVoiceRecording('admin_reply');
+    }
+  });
+
+  document.getElementById('stopVoiceRecBtn_admin_reply')?.addEventListener('click', stopWebVoiceRecording);
+  document.getElementById('delVoiceDraftBtn_admin_reply')?.addEventListener('click', () => {
+    clearWebVoiceDraft();
+    renderAll();
+  });
+  document.getElementById('sendVoiceDraftBtn_admin_reply')?.addEventListener('click', async () => {
+    const rec = state.supportRecorder;
+    if (!rec.blob) return;
+    const blob = rec.blob;
+    const mime = rec.mime;
+    const dur = rec.duration;
+    clearWebVoiceDraft();
+    renderAll();
+    await dispatchAdminReply({
+      messageType: 'voice',
+      text: '',
+      blobOrFile: blob,
+      fileName: `admin_voice_${Date.now()}.webm`,
+      mimeType: mime,
+      duration: dur
+    });
+  });
+}
+
 function bindAdminCommonActions(root) {
   root.querySelectorAll('[data-jump-section]').forEach((btn) =>
     btn.addEventListener('click', () => {
@@ -3239,7 +3877,7 @@ function navigateMobile(view) {
 
 function openCategoryInMobile(categoryId) {
   state.selectedCategoryId = categoryId;
-  state.selectedSubcategory = 'All';
+  state.selectedSubcategory = null;
   state.categorySearch = '';
   state.categoryBannerIndex = 0;
   navigateMobile('categories');
@@ -3248,20 +3886,32 @@ function openCategoryInMobile(categoryId) {
 function renderMobileBottomNav() {
   const nav = document.getElementById('bottomNav');
   if (!nav) return;
+  const supportUnread = getUserSupportConversations().reduce(
+    (sum, c) => sum + Number(c.unreadCountUser || 0),
+    0
+  );
   const items = [
-    { id: 'home', label: 'Home', icon: 'assets/icons/nav-home.svg' },
-    { id: 'map', label: 'Map', icon: 'assets/icons/nav-map.svg' },
-    { id: 'bookings', label: 'Bookings', icon: 'assets/icons/nav-bookings.svg' },
-    { id: 'profile', label: 'Profile', icon: 'assets/icons/nav-profile.svg' },
-    { id: 'prohub', label: 'Pro Hub', icon: 'assets/icons/cat-electrician.svg' }
+    { id: 'home', label: 'Home', icon: 'assets/icons/nav-home.svg', badge: 0 },
+    { id: 'map', label: 'Map', icon: 'assets/icons/nav-map.svg', badge: 0 },
+    { id: 'bookings', label: 'Bookings', icon: 'assets/icons/nav-bookings.svg', badge: 0 },
+    { id: 'support', label: 'Support', icon: 'assets/icons/nav-support.svg', badge: supportUnread },
+    { id: 'profile', label: 'Profile', icon: 'assets/icons/nav-profile.svg', badge: 0 }
   ];
-  const activeTab = state.mobileView === 'categories' ? 'home' : state.mobileView === 'subscription' ? 'profile' : state.mobileView;
+  const activeTab =
+    state.mobileView === 'categories'
+      ? 'home'
+      : ['subscription', 'prohub'].includes(state.mobileView)
+        ? 'profile'
+        : state.mobileView;
 
   nav.innerHTML = items
     .map(
       (item) => `
       <button type="button" class="sc-nav-item ${activeTab === item.id ? 'active' : ''}" data-mobile-tab="${item.id}">
-        <img src="${item.icon}" alt="${item.label}" />
+        <span class="sc-nav-icon-wrap">
+          <img src="${item.icon}" alt="${item.label}" />
+          ${item.badge > 0 ? `<span class="sc-nav-badge">${item.badge > 9 ? '9+' : item.badge}</span>` : ''}
+        </span>
         <span>${item.label}</span>
       </button>`
     )
@@ -3328,6 +3978,11 @@ function bindMobileTechCardClicks(container) {
 function renderMobileHome() {
   document.getElementById('locationText').textContent = state.mobileLocation.name;
   document.getElementById('notificationBadge').textContent = String(state.data.notifications.length);
+  const registeredPros = getTechnicians().filter(
+    (t) => t.listed !== false && t.verificationStatus !== 'REJECTED'
+  ).length;
+  const regCountEl = document.getElementById('registeredProsCount');
+  if (regCountEl) regCountEl.textContent = String(registeredPros);
 
   const q = state.mobileSearch.trim().toLowerCase();
   const searchWrap = document.getElementById('homeSearchResultsWrap');
@@ -3379,7 +4034,7 @@ function renderMobileHome() {
 
 function renderMobileCategoryPage() {
   const cat = categoryMeta(state.selectedCategoryId);
-  const subchips = ['All', ...(cat.subcategories || [])];
+  const subchips = cat.subcategories || [];
 
   document.getElementById('categoryPageIconBadge').textContent = cat.icon || '🔧';
   document.getElementById('categoriesPageTitle').textContent = cat.name;
@@ -3389,7 +4044,7 @@ function renderMobileCategoryPage() {
     .filter((t) => t.listed !== false && t.verificationStatus !== 'REJECTED')
     .filter((t) => t.categoryId === cat.id || normalizeCategoryGroupId(t.categoryId) === cat.id)
     .filter((t) => {
-      if (state.selectedSubcategory === 'All') return true;
+      if (!state.selectedSubcategory) return true;
       const subLower = state.selectedSubcategory.toLowerCase();
       return (
         String(t.subcategory || '').toLowerCase().includes(subLower) ||
@@ -3415,7 +4070,8 @@ function renderMobileCategoryPage() {
     .join('');
   subRow.querySelectorAll('[data-subchip]').forEach((btn) =>
     btn.addEventListener('click', () => {
-      state.selectedSubcategory = btn.dataset.subchip;
+      state.selectedSubcategory =
+        state.selectedSubcategory === btn.dataset.subchip ? null : btn.dataset.subchip;
       renderMobileCategoryPage();
     })
   );
@@ -3545,6 +4201,29 @@ function renderMobileProfile() {
            </div>`
     }
 
+    <div class="profile-menu-list">
+      <button type="button" class="profile-menu-item" id="profileOpenBookingsMenu">
+        <div>
+          <strong style="font-size:12.5px;display:block;">My Bookings</strong>
+          <span style="font-size:11px;color:#64748b;">Track active &amp; completed service jobs</span>
+        </div>
+        <span style="color:#64748b;font-weight:700;">&rsaquo;</span>
+      </button>
+      <button type="button" class="profile-menu-item" id="profileOpenSupportMenu">
+        <div>
+          <strong style="font-size:12.5px;display:block;">Help &amp; Support</strong>
+          <span style="font-size:11px;color:#64748b;">Send message, voice note, screenshot or PDF</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${(() => {
+            const unread = getUserSupportConversations().reduce((a, c) => a + Number(c.unreadCountUser || 0), 0);
+            return unread > 0 ? `<span class="nav-badge">${unread}</span>` : '';
+          })()}
+          <span style="color:#64748b;font-weight:700;">&rsaquo;</span>
+        </div>
+      </button>
+    </div>
+
     <div class="info-card">
       <strong>Account Settings</strong>
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;">
@@ -3563,6 +4242,8 @@ function renderMobileProfile() {
   `;
 
   document.getElementById('openMySubscriptionBtn')?.addEventListener('click', () => navigateMobile('subscription'));
+  document.getElementById('profileOpenBookingsMenu')?.addEventListener('click', () => navigateMobile('bookings'));
+  document.getElementById('profileOpenSupportMenu')?.addEventListener('click', () => navigateMobile('support'));
   document.getElementById('simBookingIncBtn')?.addEventListener('click', () => {
     state.mobileMonthlyBookingsUsed = PRO_PLAN_ENABLED
       ? (state.mobileMonthlyBookingsUsed + 1) % 6
@@ -3665,11 +4346,522 @@ function renderMobileNotifications() {
     .join('');
 }
 
+function renderMobileSupport() {
+  const body = document.getElementById('mobileSupportBody');
+  const titleEl = document.getElementById('supportPageTitle');
+  const subEl = document.getElementById('supportPageSubtitle');
+  const backBtn = document.getElementById('supportBackNavBtn');
+  if (!body) return;
+
+  const convs = getUserSupportConversations();
+  const activeConv = state.activeSupportConvId
+    ? convs.find((c) => (c.conversationId || c.id) === state.activeSupportConvId)
+    : null;
+
+  if (activeConv) {
+    const cid = activeConv.conversationId || activeConv.id;
+    const msgs = state.supportMessagesByConv[cid] || [];
+    const failedItems = state.pendingSupportFailed.filter((p) => p.conversationId === cid);
+    if (titleEl) titleEl.textContent = 'SkillConnect Support Chat';
+    if (subEl) subEl.textContent = `${activeConv.issueCategory} • ${activeConv.status}`;
+    if (backBtn) {
+      backBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        state.activeSupportConvId = null;
+        renderMobileSupport();
+      };
+    }
+
+    if (state.authUser && (activeConv.unreadCountUser > 0 || msgs.some((m) => m.senderRole === 'Admin' && !m.readAt))) {
+      markSupportReadWeb({ conversation: activeConv, messages: msgs, viewerRole: 'User' }).catch(() => {});
+    }
+
+    body.innerHTML = `
+      <div class="support-chat-shell">
+        <div class="support-chat-head">
+          <div class="support-headset-badge">&#127911;</div>
+          <div style="flex:1;min-width:0;">
+            <strong style="font-size:13px;display:block;">SkillConnect Support Team</strong>
+            <span style="font-size:11px;color:#027245;">Support conversation</span>
+          </div>
+          <span class="support-status-badge ${supportStatusClass(activeConv.status)}">${esc(activeConv.status)}</span>
+        </div>
+
+        <div class="support-msg-stream" id="mobileSupportMsgStream">
+          ${
+            msgs.length
+              ? msgs.map((m) => renderSupportMessageHtml(m, false)).join('')
+              : `<div class="support-msg-row">
+                   <div class="support-bubble">Assalam-o-Alaikum! How can we help you today?</div>
+                   <div class="support-msg-meta">Support Team</div>
+                 </div>`
+          }
+          ${failedItems
+            .map(
+              (p) => `
+              <div class="support-msg-row outgoing">
+                <div class="support-bubble" style="background:#fee2e2;border-color:#fecaca;">
+                  <div>${esc(p.text || p.name || 'Message')}</div>
+                  <div style="font-size:11px;color:#991b1b;">${esc(p.error)}</div>
+                  <div style="display:flex;gap:6px;">
+                    <button type="button" class="btn btn-outline btn-sm" data-retry-support-msg="${esc(p.messageId)}">Retry</button>
+                    <button type="button" class="btn btn-danger btn-sm" data-del-support-msg="${esc(p.messageId)}">Remove</button>
+                  </div>
+                </div>
+              </div>`
+            )
+            .join('')}
+        </div>
+
+        ${renderVoiceBarHtml('mobile_chat')}
+
+        <form class="support-composer-pill" id="mobileSupportChatForm">
+          <input type="file" id="mobileChatFileInput" accept="image/jpeg,image/png,image/webp,application/pdf" class="hidden" />
+          <button type="button" class="support-icon-btn" id="mobileChatAttachBtn" title="Attach image or PDF">&#128206;</button>
+          <input type="text" id="mobileChatTextInput" class="support-pill-input" placeholder="Type your message..." autocomplete="off" />
+          <button type="button" class="support-icon-btn ${state.supportRecorder.target === 'mobile_chat' && state.supportRecorder.isRecording ? 'recording' : ''}" id="mobileChatMicBtn" title="Record voice">&#127908;</button>
+          <button type="submit" class="support-icon-btn" title="Send">&#10148;</button>
+        </form>
+      </div>
+    `;
+
+    const streamEl = document.getElementById('mobileSupportMsgStream');
+    if (streamEl) streamEl.scrollTop = streamEl.scrollHeight;
+
+    body.querySelectorAll('[data-support-zoom-img]').forEach((img) =>
+      img.addEventListener('click', () => openSupportImageZoomModal(img.dataset.supportZoomImg))
+    );
+
+    const dispatchUserMsg = async ({ messageId, messageType, text, blobOrFile = null, fileName = '', mimeType = '', duration = 0 }) => {
+      try {
+        if (state.authUser) {
+          let attachmentUrl = '';
+          let attachmentPath = '';
+          if (messageType !== 'text' && blobOrFile) {
+            const up = await uploadSupportAttachmentWeb({
+              conversationId: cid,
+              ownerUid: state.authUser.uid,
+              blobOrFile,
+              fileName,
+              mimeType
+            });
+            attachmentUrl = up.downloadUrl;
+            attachmentPath = up.storagePath;
+            mimeType = up.cleanMime;
+          }
+          await sendSupportMessageWeb({
+            conversation: activeConv,
+            messageId,
+            senderId: state.authUser.uid,
+            senderName: state.authUser.displayName || 'SkillConnect User',
+            senderRole: 'User',
+            messageType,
+            text,
+            attachmentUrl,
+            attachmentPath,
+            attachmentName: fileName,
+            attachmentType: mimeType,
+            duration
+          });
+        } else {
+          const list = state.supportMessagesByConv[cid] || [];
+          list.push({
+            messageId,
+            conversationId: cid,
+            senderRole: 'User',
+            senderName: 'You',
+            messageType,
+            text,
+            attachmentUrl: blobOrFile ? URL.createObjectURL(blobOrFile) : '',
+            attachmentName: fileName,
+            duration,
+            createdAtMillis: Date.now()
+          });
+          state.supportMessagesByConv[cid] = list;
+          activeConv.lastMessage = text || fileName || 'Message';
+          renderMobileSupport();
+        }
+        state.pendingSupportFailed = state.pendingSupportFailed.filter((p) => p.messageId !== messageId);
+      } catch (err) {
+        if (!state.pendingSupportFailed.some((p) => p.messageId === messageId)) {
+          state.pendingSupportFailed.push({
+            messageId,
+            conversationId: cid,
+            messageType,
+            text,
+            blobOrFile,
+            name: fileName,
+            mime: mimeType,
+            duration,
+            error: err?.message || 'Failed to send'
+          });
+        }
+        renderMobileSupport();
+      }
+    };
+
+    document.getElementById('mobileSupportChatForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('mobileChatTextInput');
+      const txt = String(input?.value || '').trim();
+      if (!txt) return;
+      input.value = '';
+      await dispatchUserMsg({ messageId: newSupportMessageId(), messageType: 'text', text: txt });
+    });
+
+    document.getElementById('mobileChatAttachBtn')?.addEventListener('click', () => {
+      document.getElementById('mobileChatFileInput')?.click();
+    });
+
+    document.getElementById('mobileChatFileInput')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const err = validateSupportFileWeb(file);
+      if (err) {
+        showToast(err);
+        return;
+      }
+      const isPdf = file.type === 'application/pdf';
+      await dispatchUserMsg({
+        messageId: newSupportMessageId(),
+        messageType: isPdf ? 'document' : 'image',
+        text: isPdf ? 'Shared a PDF document' : 'Shared a screenshot',
+        blobOrFile: file,
+        fileName: file.name,
+        mimeType: file.type
+      });
+    });
+
+    document.getElementById('mobileChatMicBtn')?.addEventListener('click', () => {
+      if (state.supportRecorder.target === 'mobile_chat' && state.supportRecorder.isRecording) {
+        stopWebVoiceRecording();
+      } else {
+        startWebVoiceRecording('mobile_chat');
+      }
+    });
+
+    document.getElementById('stopVoiceRecBtn_mobile_chat')?.addEventListener('click', stopWebVoiceRecording);
+    document.getElementById('delVoiceDraftBtn_mobile_chat')?.addEventListener('click', () => {
+      clearWebVoiceDraft();
+      renderMobileSupport();
+    });
+    document.getElementById('sendVoiceDraftBtn_mobile_chat')?.addEventListener('click', async () => {
+      const rec = state.supportRecorder;
+      if (!rec.blob) return;
+      const blob = rec.blob;
+      const mime = rec.mime;
+      const dur = rec.duration;
+      clearWebVoiceDraft();
+      renderMobileSupport();
+      await dispatchUserMsg({
+        messageId: newSupportMessageId(),
+        messageType: 'voice',
+        text: '',
+        blobOrFile: blob,
+        fileName: `voice_${Date.now()}.webm`,
+        mimeType: mime,
+        duration: dur
+      });
+    });
+
+    body.querySelectorAll('[data-retry-support-msg]').forEach((btn) =>
+      btn.addEventListener('click', async () => {
+        const item = state.pendingSupportFailed.find((x) => x.messageId === btn.dataset.retrySupportMsg);
+        if (!item) return;
+        await dispatchUserMsg({
+          messageId: item.messageId,
+          messageType: item.messageType,
+          text: item.text,
+          blobOrFile: item.blobOrFile,
+          fileName: item.name,
+          mimeType: item.mime,
+          duration: item.duration
+        });
+      })
+    );
+    body.querySelectorAll('[data-del-support-msg]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        state.pendingSupportFailed = state.pendingSupportFailed.filter((x) => x.messageId !== btn.dataset.delSupportMsg);
+        renderMobileSupport();
+      })
+    );
+    return;
+  }
+
+  if (state.mobileSupportCreatingNew) {
+    if (titleEl) titleEl.textContent = 'New Support Message';
+    if (subEl) subEl.textContent = 'Select a category and describe your problem';
+    if (backBtn) {
+      backBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        state.mobileSupportCreatingNew = false;
+        renderMobileSupport();
+      };
+    }
+
+    body.innerHTML = `
+      <div class="info-card">
+        <strong style="font-size:13px;">Select Issue Category</strong>
+        <div class="support-cat-grid" style="margin-top:4px;">
+          ${SUPPORT_CATEGORIES.map(
+            (cat) => `
+            <button type="button" class="support-cat-pill ${state.newTicketCategory === cat ? 'active' : ''}" data-pick-support-cat="${esc(cat)}">
+              ${esc(cat)}
+            </button>`
+          ).join('')}
+        </div>
+      </div>
+
+      <div class="info-card">
+        <strong style="font-size:13px;">Describe Your Problem</strong>
+        <textarea id="newSupportDescInput" rows="4" class="field-input" style="padding:9px;resize:vertical;" placeholder="Explain what happened...">${esc(state.newTicketDescription)}</textarea>
+
+        <div style="display:flex;gap:6px;margin-top:4px;">
+          <input type="file" id="newSupportFileInput" accept="image/jpeg,image/png,image/webp,application/pdf" class="hidden" />
+          <button type="button" class="btn btn-outline btn-sm" id="newSupportAttachBtn" style="flex:1;">Attach Image / PDF</button>
+          <button type="button" class="btn btn-outline btn-sm" id="newSupportMicBtn" style="flex:1;">
+            ${state.supportRecorder.target === 'mobile_new' && state.supportRecorder.isRecording ? 'Stop Voice' : 'Record Voice'}
+          </button>
+        </div>
+
+        ${
+          state.newTicketAttachment
+            ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 9px;border-radius:8px;background:#ecfdf5;font-size:11.5px;margin-top:4px;">
+                 <span>Attached: ${esc(state.newTicketAttachment.name)}</span>
+                 <button type="button" class="btn btn-danger btn-sm" id="clearNewTicketAttBtn">&times;</button>
+               </div>`
+            : ''
+        }
+        ${renderVoiceBarHtml('mobile_new')}
+
+        <button type="button" class="primary-full-btn" id="submitNewSupportTicketBtn" style="margin-top:8px;">Start Support Chat</button>
+      </div>
+    `;
+
+    body.querySelectorAll('[data-pick-support-cat]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        state.newTicketCategory = btn.dataset.pickSupportCat;
+        renderMobileSupport();
+      })
+    );
+    document.getElementById('newSupportDescInput')?.addEventListener('input', (e) => {
+      state.newTicketDescription = e.target.value;
+    });
+    document.getElementById('newSupportAttachBtn')?.addEventListener('click', () => {
+      document.getElementById('newSupportFileInput')?.click();
+    });
+    document.getElementById('newSupportFileInput')?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const err = validateSupportFileWeb(file);
+      if (err) {
+        showToast(err);
+        return;
+      }
+      clearWebVoiceDraft();
+      state.newTicketAttachment = {
+        type: file.type === 'application/pdf' ? 'document' : 'image',
+        file,
+        name: file.name,
+        mime: file.type
+      };
+      renderMobileSupport();
+    });
+    document.getElementById('clearNewTicketAttBtn')?.addEventListener('click', () => {
+      state.newTicketAttachment = null;
+      renderMobileSupport();
+    });
+    document.getElementById('newSupportMicBtn')?.addEventListener('click', () => {
+      if (state.supportRecorder.target === 'mobile_new' && state.supportRecorder.isRecording) {
+        stopWebVoiceRecording();
+      } else {
+        state.newTicketAttachment = null;
+        startWebVoiceRecording('mobile_new');
+      }
+    });
+    document.getElementById('stopVoiceRecBtn_mobile_new')?.addEventListener('click', stopWebVoiceRecording);
+    document.getElementById('delVoiceDraftBtn_mobile_new')?.addEventListener('click', () => {
+      clearWebVoiceDraft();
+      renderMobileSupport();
+    });
+
+    document.getElementById('submitNewSupportTicketBtn')?.addEventListener('click', async () => {
+      const desc = state.newTicketDescription.trim();
+      const rec = state.supportRecorder.target === 'mobile_new' ? state.supportRecorder : null;
+      const att = state.newTicketAttachment;
+      if (!desc && !att && !rec?.blob) {
+        showToast('Enter a description or add a screenshot, PDF, or voice note.');
+        return;
+      }
+      const subject = desc.split('\n')[0]?.slice(0, 70) || state.newTicketCategory;
+      const msgType = rec?.blob ? 'voice' : att ? att.type : 'text';
+      const blobOrFile = rec?.blob || att?.file || null;
+      const fileName = rec?.blob ? `voice_${Date.now()}.webm` : att?.name || '';
+      const mimeType = rec?.blob ? rec.mime : att?.mime || '';
+      const duration = rec?.blob ? rec.duration : 0;
+
+      if (state.authUser) {
+        const uid = state.authUser.uid;
+        const convId = newSupportConversationId(uid);
+        const msgId = newSupportMessageId();
+        try {
+          let attachmentUrl = '';
+          let attachmentPath = '';
+          if (msgType !== 'text' && blobOrFile) {
+            const up = await uploadSupportAttachmentWeb({
+              conversationId: convId,
+              ownerUid: uid,
+              blobOrFile,
+              fileName,
+              mimeType
+            });
+            attachmentUrl = up.downloadUrl;
+            attachmentPath = up.storagePath;
+            mimeType = up.cleanMime;
+          }
+          await createSupportConversationWeb({
+            conversationId: convId,
+            messageId: msgId,
+            userId: uid,
+            userName: state.authUser.displayName || state.authUser.email || 'SkillConnect User',
+            userEmail: state.authUser.email || '',
+            accountType: 'Customer',
+            issueCategory: state.newTicketCategory,
+            subject,
+            messageType: msgType,
+            text: desc,
+            attachmentUrl,
+            attachmentPath,
+            attachmentName: fileName,
+            attachmentType: mimeType,
+            duration
+          });
+          clearWebVoiceDraft();
+          state.newTicketAttachment = null;
+          state.newTicketDescription = '';
+          state.mobileSupportCreatingNew = false;
+          state.activeSupportConvId = convId;
+          ensureSupportMessagesSubscribed(convId, false);
+          renderMobileSupport();
+        } catch (err) {
+          showToast(err?.message || 'Unable to start support chat');
+        }
+      } else {
+        const convId = newSupportConversationId('preview');
+        const msgId = newSupportMessageId();
+        const previewConv = {
+          conversationId: convId,
+          userId: 'preview',
+          userName: 'Saad Mahmood',
+          accountType: 'Customer',
+          issueCategory: state.newTicketCategory,
+          subject,
+          status: 'Open',
+          lastMessage: desc || fileName || 'Voice message',
+          unreadCountUser: 0,
+          unreadCountAdmin: 1,
+          updatedAt: Date.now()
+        };
+        if (!Array.isArray(state.data.supportConversations)) state.data.supportConversations = [];
+        state.data.supportConversations.unshift(previewConv);
+        state.supportMessagesByConv[convId] = [
+          {
+            messageId: msgId,
+            conversationId: convId,
+            senderRole: 'User',
+            senderName: 'You',
+            messageType: msgType,
+            text: desc,
+            attachmentUrl: blobOrFile ? URL.createObjectURL(blobOrFile) : '',
+            attachmentName: fileName,
+            duration,
+            createdAtMillis: Date.now()
+          }
+        ];
+        clearWebVoiceDraft();
+        state.newTicketAttachment = null;
+        state.newTicketDescription = '';
+        state.mobileSupportCreatingNew = false;
+        state.activeSupportConvId = convId;
+        renderAll();
+      }
+    });
+    return;
+  }
+
+  // Landing Page: Help & Support
+  if (titleEl) titleEl.textContent = 'Help & Support';
+  if (subEl) subEl.textContent = 'Have a problem? Send us a message. Our support team is here to help.';
+  if (backBtn) {
+    backBtn.onclick = () => navigateMobile('home');
+  }
+
+  body.innerHTML = `
+    <div class="info-card">
+      <div class="info-card-top">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <div class="support-headset-badge">&#127911;</div>
+          <div>
+            <strong style="font-size:14px;display:block;">SkillConnect Support Team</strong>
+            <span class="support-online-chip" style="margin-top:3px;">
+              <span class="support-online-dot"></span> Online &bull; Direct In-App Support
+            </span>
+          </div>
+        </div>
+      </div>
+      <p style="margin:4px 0 6px;font-size:12px;color:#475569;">
+        Contact our support team directly through the application.
+      </p>
+      <button type="button" class="primary-full-btn" id="supportNewMessageBtn">+ New Message</button>
+    </div>
+
+    <div style="font-size:13px;font-weight:700;color:#0f172a;padding:2px 2px 0;">Previous Conversations</div>
+
+    ${
+      convs.length
+        ? convs
+            .map((c) => {
+              const cid = c.conversationId || c.id;
+              return `
+                <button type="button" class="support-conv-row" data-open-support-conv="${esc(cid)}">
+                  <div class="info-card-top">
+                    <span class="badge badge-green">${esc(c.issueCategory)}</span>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      ${c.unreadCountUser > 0 ? `<span class="nav-badge">${c.unreadCountUser}</span>` : ''}
+                      <span class="support-status-badge ${supportStatusClass(c.status)}">${esc(c.status)}</span>
+                    </div>
+                  </div>
+                  <div style="font-size:12px;color:#334155;text-align:left;">${esc(c.lastMessage || c.subject)}</div>
+                </button>`;
+            })
+            .join('')
+        : '<div class="info-card" style="font-size:12px;color:#64748b;">No previous conversations yet. Tap New Message above to contact our support team.</div>'
+    }
+  `;
+
+  document.getElementById('supportNewMessageBtn')?.addEventListener('click', () => {
+    state.mobileSupportCreatingNew = true;
+    renderMobileSupport();
+  });
+
+  body.querySelectorAll('[data-open-support-conv]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const cid = btn.dataset.openSupportConv;
+      state.activeSupportConvId = cid;
+      ensureSupportMessagesSubscribed(cid, false);
+      renderMobileSupport();
+    })
+  );
+}
+
 function renderMobileActiveView() {
   if (state.mobileView === 'home') return renderMobileHome();
   if (state.mobileView === 'categories') return renderMobileCategoryPage();
   if (state.mobileView === 'map') return renderMobileMap();
   if (state.mobileView === 'bookings') return renderMobileBookings();
+  if (state.mobileView === 'support') return renderMobileSupport();
   if (state.mobileView === 'profile') return renderMobileProfile();
   if (state.mobileView === 'subscription') return renderMobileSubscription();
   if (state.mobileView === 'prohub') return renderMobileProHub();

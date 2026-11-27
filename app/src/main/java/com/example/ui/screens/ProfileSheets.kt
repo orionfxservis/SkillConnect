@@ -21,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BookmarkRemove
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -226,61 +225,6 @@ fun ProfileSettingsSheet(
         Spacer(modifier = Modifier.width(8.dp))
         Text("Sync Current GPS Location")
       }
-    }
-  }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun HelpAndSupportSheet(onDismiss: () -> Unit) {
-  ModalBottomSheet(
-    onDismissRequest = onDismiss,
-    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Text(text = "Help & Support", style = MaterialTheme.typography.titleLarge)
-      SupportFaqItem(
-        title = "100% Free Connection — No Payment Gate",
-        body = "SkillConnect never charges commissions or holds payments online. You agree charges directly with the technical person and pay them after completion of work.",
-      )
-      SupportFaqItem(
-        title = "Dynamic Trust & Rating Accountability",
-        body = "After a booking is completed, clients leave verified 1-5 star ratings that raise or lower a technician's profile rank across nearby searches.",
-      )
-      SupportFaqItem(
-        title = "Provider Verification & Disputes",
-        body = "Super Admin reviews CNIC and trade certificates before issuing the Verified badge. You can report any booking issue directly from your Booking Details screen.",
-      )
-    }
-  }
-}
-
-@Composable
-private fun SupportFaqItem(title: String, body: String) {
-  Surface(
-    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-    shape = RoundedCornerShape(14.dp),
-    modifier = Modifier.fillMaxWidth(),
-  ) {
-    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          Icons.Rounded.VerifiedUser,
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = title, style = MaterialTheme.typography.titleSmall)
-      }
-      Text(
-        text = body,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
     }
   }
 }

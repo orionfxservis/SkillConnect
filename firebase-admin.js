@@ -26,9 +26,16 @@ import {
   onSnapshot,
   query,
   where,
+  increment,
   serverTimestamp,
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL
+} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
 
 export const ADMIN_EMAIL = 'admin-skillconnect@orionfx.net';
 export const FIRESTORE_DATABASE_ID = 'ai-studio-android-fixnear-1e2833ef-438f-432a-bea1-b8878edb9181';
@@ -45,20 +52,43 @@ const FIREBASE_CONFIG = {
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app, FIRESTORE_DATABASE_ID);
+const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
+let cachedIsClaimAdmin = false;
+
+async function syncClaimAdminStatus(user) {
+  if (!user) {
+    cachedIsClaimAdmin = false;
+    return false;
+  }
+  try {
+    const res = await user.getIdTokenResult(false);
+    const claims = res?.claims || {};
+    cachedIsClaimAdmin =
+      claims.admin === true ||
+      String(claims.role || '').toLowerCase() === 'admin';
+  } catch (_) {
+    cachedIsClaimAdmin = false;
+  }
+  return cachedIsClaimAdmin;
+}
+
 export function isAdminUser(user) {
-  return Boolean(
-    user &&
-      user.emailVerified &&
-      String(user.email || '').toLowerCase() === ADMIN_EMAIL
-  );
+  if (!user) return false;
+  const bootstrapAdmin =
+    Boolean(user.emailVerified) &&
+    String(user.email || '').toLowerCase() === ADMIN_EMAIL;
+  return bootstrapAdmin || cachedIsClaimAdmin;
 }
 
 export async function refreshAdminSession() {
   const user = auth.currentUser;
-  if (!user) return null;
+  if (!user) {
+    cachedIsClaimAdmin = false;
+    return null;
+  }
   try {
     await user.reload();
   } catch (_) {
@@ -66,6 +96,7 @@ export async function refreshAdminSession() {
   }
   try {
     await user.getIdToken(true);
+    await syncClaimAdminStatus(auth.currentUser || user);
   } catch (_) {
     // Ignore token refresh failures when offline
   }
@@ -74,17 +105,21 @@ export async function refreshAdminSession() {
 
 export function subscribeAuthState(callback) {
   return onAuthStateChanged(auth, async (user) => {
-    if (user && String(user.email || '').toLowerCase() === ADMIN_EMAIL) {
+    if (user) {
       try {
-        await user.reload();
-        await user.getIdToken(true);
+        if (String(user.email || '').toLowerCase() === ADMIN_EMAIL) {
+          await user.reload();
+          await user.getIdToken(true);
+        }
+        await syncClaimAdminStatus(auth.currentUser || user);
       } catch (_) {
         // Proceed with cached user if network refresh fails
       }
       callback(auth.currentUser || user);
       return;
     }
-    callback(user);
+    cachedIsClaimAdmin = false;
+    callback(null);
   });
 }
 
@@ -151,6 +186,7 @@ export function subscribeAdminWorkspace({
   onBanners,
   onPayments,
   onSubscriptions,
+  onSupportConversations,
   onError
 }) {
   const unsubs = [];
@@ -173,6 +209,9 @@ export function subscribeAdminWorkspace({
   bind('banners', onBanners);
   bind('payments', onPayments);
   bind('provider_subscriptions', onSubscriptions);
+  if (onSupportConversations) {
+    bind('support_conversations', onSupportConversations);
+  }
 
   return () => unsubs.forEach((fn) => fn());
 }
@@ -495,6 +534,216 @@ export async function resolveComplaintAdmin(complaintId, status, adminResolution
   await updateDoc(doc(db, 'complaints', complaintId), {
     status,
     adminResolution: String(adminResolution || '').slice(0, 400),
+    updatedAt: serverTimestamp()
+  });
+}
+
+/* ---------- In-App Help & Support Chat (Firestore + Storage) ---------- */
+export function newSupportConversationId(uid) {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `sc_${uid}--${Date.now()}_${rand}`;
+}
+
+export function newSupportMessageId() {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `msg_${Date.now()}_${rand}`;
+}
+
+export function subscribeUserSupportConversations(userId, onData, onError) {
+  return onSnapshot(
+    query(collection(db, 'support_conversations'), where('userId', '==', userId)),
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => onError && onError(err)
+  );
+}
+
+export function subscribeSupportMessages(conversationId, onData, onError) {
+  return onSnapshot(
+    query(collection(db, 'support_messages'), where('conversationId', '==', conversationId)),
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => onError && onError(err)
+  );
+}
+
+export async function uploadSupportAttachmentWeb({ conversationId, ownerUid, blobOrFile, fileName, mimeType }) {
+  const safeName = String(fileName || `file_${Date.now()}`)
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(-80);
+  const path = `support-attachments/${conversationId}/${Date.now()}_${safeName}`;
+  const cleanMime = String(mimeType || blobOrFile.type || 'application/octet-stream')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  const fileRef = storageRef(storage, path);
+  await uploadBytes(fileRef, blobOrFile, {
+    contentType: cleanMime,
+    customMetadata: { ownerUid: String(ownerUid || '') }
+  });
+  const downloadUrl = await getDownloadURL(fileRef);
+  return { downloadUrl, storagePath: path, cleanMime };
+}
+
+function summarizeSupportPreview(messageType, text) {
+  const clean = String(text || '').trim();
+  if (clean) return clean.slice(0, 120);
+  if (messageType === 'voice') return 'Voice message';
+  if (messageType === 'image') return 'Image attachment';
+  if (messageType === 'document') return 'PDF document';
+  return 'New support message';
+}
+
+export async function createSupportConversationWeb({
+  conversationId,
+  messageId,
+  userId,
+  userName,
+  userEmail,
+  accountType,
+  issueCategory,
+  subject,
+  messageType,
+  text,
+  attachmentUrl = '',
+  attachmentPath = '',
+  attachmentName = '',
+  attachmentType = '',
+  duration = 0
+}) {
+  const convRef = doc(db, 'support_conversations', conversationId);
+  const msgRef = doc(db, 'support_messages', messageId);
+  const existingMsg = await getDoc(msgRef);
+  if (existingMsg.exists()) return conversationId;
+
+  const preview = summarizeSupportPreview(messageType, text);
+  const batch = writeBatch(db);
+  batch.set(convRef, {
+    conversationId,
+    userId,
+    userName: String(userName || 'SkillConnect User').slice(0, 80),
+    userEmail: String(userEmail || '').slice(0, 120),
+    accountType: accountType === 'Service Provider' ? 'Service Provider' : 'Customer',
+    issueCategory: String(issueCategory || 'Other Issue').slice(0, 80),
+    subject: String(subject || issueCategory || 'Support Request').slice(0, 120),
+    status: 'Open',
+    assignedAdminId: '',
+    lastMessage: preview,
+    lastMessageAt: serverTimestamp(),
+    unreadCountUser: 0,
+    unreadCountAdmin: 1,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+
+  batch.set(msgRef, {
+    messageId,
+    conversationId,
+    conversationOwnerId: userId,
+    senderId: userId,
+    senderName: String(userName || 'SkillConnect User').slice(0, 80),
+    senderRole: 'User',
+    messageType,
+    text: String(text || '').trim().slice(0, 3000),
+    attachmentUrl: String(attachmentUrl || '').slice(0, 2000),
+    attachmentPath: String(attachmentPath || '').slice(0, 400),
+    attachmentName: String(attachmentName || '').slice(0, 200),
+    attachmentType: String(attachmentType || '').slice(0, 80),
+    duration: Math.max(0, Number(duration) || 0),
+    createdAt: serverTimestamp()
+  });
+
+  await batch.commit();
+  return conversationId;
+}
+
+export async function sendSupportMessageWeb({
+  conversation,
+  messageId,
+  senderId,
+  senderName,
+  senderRole,
+  messageType,
+  text,
+  attachmentUrl = '',
+  attachmentPath = '',
+  attachmentName = '',
+  attachmentType = '',
+  duration = 0
+}) {
+  const convId = conversation.conversationId || conversation.id;
+  const ownerId = conversation.userId;
+  const msgRef = doc(db, 'support_messages', messageId);
+  const existingMsg = await getDoc(msgRef);
+  if (existingMsg.exists()) return;
+
+  const convRef = doc(db, 'support_conversations', convId);
+  const preview = summarizeSupportPreview(messageType, text);
+  const batch = writeBatch(db);
+
+  batch.set(msgRef, {
+    messageId,
+    conversationId: convId,
+    conversationOwnerId: ownerId,
+    senderId,
+    senderName: String(senderName || (senderRole === 'Admin' ? 'Support Team' : 'User')).slice(0, 80),
+    senderRole,
+    messageType,
+    text: String(text || '').trim().slice(0, 3000),
+    attachmentUrl: String(attachmentUrl || '').slice(0, 2000),
+    attachmentPath: String(attachmentPath || '').slice(0, 400),
+    attachmentName: String(attachmentName || '').slice(0, 200),
+    attachmentType: String(attachmentType || '').slice(0, 80),
+    duration: Math.max(0, Number(duration) || 0),
+    createdAt: serverTimestamp()
+  });
+
+  const convUpdate = {
+    lastMessage: preview,
+    lastMessageAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+
+  if (senderRole === 'Admin') {
+    convUpdate.unreadCountUser = increment(1);
+    convUpdate.unreadCountAdmin = 0;
+    if (conversation.status === 'Open') convUpdate.status = 'Pending';
+    if (!conversation.assignedAdminId) convUpdate.assignedAdminId = auth.currentUser?.email || ADMIN_EMAIL;
+  } else {
+    convUpdate.unreadCountAdmin = increment(1);
+    convUpdate.unreadCountUser = 0;
+    if (conversation.status === 'Pending' || conversation.status === 'Resolved') {
+      convUpdate.status = 'Open';
+    }
+  }
+
+  batch.update(convRef, convUpdate);
+  await batch.commit();
+}
+
+export async function markSupportReadWeb({ conversation, messages, viewerRole }) {
+  const convId = conversation.conversationId || conversation.id;
+  const targetRole = viewerRole === 'Admin' ? 'User' : 'Admin';
+  const unreadField = viewerRole === 'Admin' ? 'unreadCountAdmin' : 'unreadCountUser';
+  const unreadMsgs = (messages || []).filter((m) => m.senderRole === targetRole && !m.readAt);
+
+  if (!unreadMsgs.length && Number(conversation[unreadField] || 0) === 0) return;
+
+  const batch = writeBatch(db);
+  unreadMsgs.slice(0, 200).forEach((m) => {
+    batch.update(doc(db, 'support_messages', m.messageId || m.id), {
+      readAt: serverTimestamp()
+    });
+  });
+  batch.update(doc(db, 'support_conversations', convId), {
+    [unreadField]: 0,
+    updatedAt: serverTimestamp()
+  });
+  await batch.commit();
+}
+
+export async function updateSupportConversationAdminWeb({ conversationId, status, assignedAdminId }) {
+  await updateDoc(doc(db, 'support_conversations', conversationId), {
+    status,
+    assignedAdminId: String(assignedAdminId || '').slice(0, 128),
     updatedAt: serverTimestamp()
   });
 }

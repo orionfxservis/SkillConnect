@@ -1,6 +1,9 @@
 package com.example
 
 import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -26,12 +29,17 @@ import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.EventAvailable
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.SupportAgent
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,8 +85,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.data.FixNearRepository
 import com.example.data.LocationHelper
-import com.example.model.UiState
 import com.example.data.SubscriptionPreferencesStore
+import com.example.data.SupportMessagingService
+import com.example.data.SupportRepository
+import com.example.model.UiState
 import com.example.ui.FixNearViewModel
 import com.example.ui.screens.BookingDetailAndChatScreen
 import com.example.ui.screens.BookingsScreen
@@ -88,6 +99,7 @@ import com.example.ui.screens.NearbyMapScreen
 import com.example.ui.screens.ProHubScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.SuperAdminScreen
+import com.example.ui.screens.SupportScreen
 import com.example.ui.screens.TechnicianDetailScreen
 import com.example.ui.screens.attemptAutoSignIn
 import com.example.ui.screens.onGoogleSignInClicked
@@ -108,6 +120,7 @@ object AppRoutes {
   const val DISCOVER = "discover"
   const val MAP = "map"
   const val BOOKINGS = "bookings"
+  const val SUPPORT = "support"
   const val PRO_HUB = "pro_hub"
   const val PROFILE = "profile"
   const val SUBSCRIPTION = "my_subscription"
@@ -153,6 +166,13 @@ private val BaseTopLevelTabs =
       selectedIcon = Icons.Rounded.EventAvailable,
       unselectedIcon = Icons.Outlined.EventAvailable,
       testTag = "nav_bookings",
+    ),
+    TopLevelTab(
+      route = AppRoutes.SUPPORT,
+      label = "Support",
+      selectedIcon = Icons.Rounded.SupportAgent,
+      unselectedIcon = Icons.Outlined.SupportAgent,
+      testTag = "nav_support",
     ),
     TopLevelTab(
       route = AppRoutes.PROFILE,
@@ -244,6 +264,7 @@ fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
                 currentUserId = user?.uid,
                 firebaseUser = user,
                 subscriptionStore = SubscriptionPreferencesStore(app),
+                supportRepository = SupportRepository(db = db, auth = auth),
               )
             }
           },
@@ -304,7 +325,14 @@ private fun MainFixNearShell(
   val phoneOtpStatusMessage by viewModel.phoneOtpStatusMessage.collectAsStateWithLifecycle()
   val phoneVerifiedSession by viewModel.phoneVerifiedSession.collectAsStateWithLifecycle()
 
-  // Admin streams (safe defaults when !viewModel.isAdmin)
+  val isAdmin by viewModel.isAdminFlow.collectAsStateWithLifecycle()
+  val supportConversationsState by viewModel.supportConversationsState.collectAsStateWithLifecycle()
+  val totalSupportUnreadCount by viewModel.totalSupportUnreadCount.collectAsStateWithLifecycle()
+  val activeSupportConversation by viewModel.activeSupportConversation.collectAsStateWithLifecycle()
+  val supportMessagesState by viewModel.supportMessagesState.collectAsStateWithLifecycle()
+  val pendingSupportMessages by viewModel.pendingSupportMessages.collectAsStateWithLifecycle()
+
+  // Admin streams (safe defaults when !isAdmin)
   val adminUsersState by viewModel.adminUsersState.collectAsStateWithLifecycle()
   val adminTechniciansState by viewModel.adminTechniciansState.collectAsStateWithLifecycle()
   val adminCategoriesState by viewModel.adminCategoriesState.collectAsStateWithLifecycle()
@@ -312,16 +340,26 @@ private fun MainFixNearShell(
   val adminComplaintsState by viewModel.adminComplaintsState.collectAsStateWithLifecycle()
   val adminInspectedVerificationDocState by
     viewModel.adminInspectedVerificationDocState.collectAsStateWithLifecycle()
+  val adminSupportConversationsState by
+    viewModel.adminSupportConversationsState.collectAsStateWithLifecycle()
+  val adminTotalSupportUnreadCount by
+    viewModel.adminTotalSupportUnreadCount.collectAsStateWithLifecycle()
+  val adminActiveSupportConversation by
+    viewModel.adminActiveSupportConversation.collectAsStateWithLifecycle()
+  val adminSupportMessagesState by viewModel.adminSupportMessagesState.collectAsStateWithLifecycle()
 
   val bottomBarTabs =
-    remember(viewModel.isAdmin) {
-      if (viewModel.isAdmin) BaseTopLevelTabs + SuperAdminTab else BaseTopLevelTabs
+    remember(isAdmin) {
+      if (isAdmin) BaseTopLevelTabs + SuperAdminTab else BaseTopLevelTabs
     }
   val railTabs =
-    remember(viewModel.isAdmin) {
-      if (viewModel.isAdmin) BaseTopLevelTabs + ProHubTab + SuperAdminTab
+    remember(isAdmin) {
+      if (isAdmin) BaseTopLevelTabs + ProHubTab + SuperAdminTab
       else BaseTopLevelTabs + ProHubTab
     }
+
+  val notifPermissionLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
 
   val permissionLauncher =
     rememberLauncherForActivityResult(
@@ -398,10 +436,50 @@ private fun MainFixNearShell(
         AppRoutes.DISCOVER,
         AppRoutes.MAP,
         AppRoutes.BOOKINGS,
+        AppRoutes.SUPPORT,
         AppRoutes.PRO_HUB,
         AppRoutes.PROFILE,
         AppRoutes.SUPER_ADMIN,
-      )
+        AppRoutes.CATEGORY_CANDIDATES,
+      ) && !(currentRoute == AppRoutes.SUPPORT && activeSupportConversation != null)
+
+  // Deep-link from FCM support notification tap
+  LaunchedEffect(firebaseUser?.uid) {
+    val activity = context as? Activity
+    val pushConvId =
+      activity?.intent?.getStringExtra(SupportMessagingService.EXTRA_SUPPORT_CONVERSATION_ID)
+    if (firebaseUser != null && !pushConvId.isNullOrBlank()) {
+      activity.intent.removeExtra(SupportMessagingService.EXTRA_SUPPORT_CONVERSATION_ID)
+      viewModel.openSupportConversation(pushConvId)
+      navController.navigate(AppRoutes.SUPPORT)
+    }
+  }
+
+  // Request notification permission once on Android 13+ when entering Support or signing in
+  LaunchedEffect(currentRoute, firebaseUser?.uid) {
+    if (
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        firebaseUser != null &&
+        currentRoute == AppRoutes.SUPPORT &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+          PackageManager.PERMISSION_GRANTED
+    ) {
+      notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+  }
+
+  // In-app alert when new support reply arrives while not inside Support screen
+  var prevUnreadCount by remember(firebaseUser?.uid) { mutableStateOf(totalSupportUnreadCount) }
+  LaunchedEffect(totalSupportUnreadCount, currentRoute) {
+    if (
+      firebaseUser != null &&
+        totalSupportUnreadCount > prevUnreadCount &&
+        currentRoute != AppRoutes.SUPPORT
+    ) {
+      snackbarHostState.showSnackbar("New reply from SkillConnect Support Team")
+    }
+    prevUnreadCount = totalSupportUnreadCount
+  }
 
   val userProfile = (userProfileState as? UiState.Success)?.data
   val currentUserName =
@@ -470,19 +548,32 @@ private fun MainFixNearShell(
                 tonalElevation = 0.dp,
               ) {
                 bottomBarTabs.forEach { tab ->
-                  val selected = currentRoute == tab.route
+                  val selected =
+                    currentRoute == tab.route ||
+                      (tab.route == AppRoutes.DISCOVER &&
+                        currentRoute == AppRoutes.CATEGORY_CANDIDATES)
                   NavigationBarItem(
                     selected = selected,
                     onClick = { navigateTopLevel(tab.route) },
                     icon = {
-                      Icon(
-                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                        contentDescription = tab.label,
-                      )
+                      val showBadge = tab.route == AppRoutes.SUPPORT && totalSupportUnreadCount > 0
+                      BadgedBox(
+                        badge = {
+                          if (showBadge) {
+                            Badge { Text(totalSupportUnreadCount.toString()) }
+                          }
+                        }
+                      ) {
+                        Icon(
+                          imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                          contentDescription = tab.label,
+                        )
+                      }
                     },
                     label = {
                       Text(
                         text = tab.label,
+                        fontSize = 11.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
                         softWrap = false,
@@ -510,22 +601,37 @@ private fun MainFixNearShell(
           Modifier.fillMaxSize()
             .padding(innerPadding)
             .then(
-              if (currentRoute != AppRoutes.DISCOVER) Modifier.statusBarsPadding()
-              else Modifier
+              if (currentRoute != AppRoutes.DISCOVER && currentRoute != AppRoutes.CATEGORY_CANDIDATES) {
+                Modifier.statusBarsPadding()
+              } else {
+                Modifier
+              }
             )
       ) {
         if (showTopLevelNav && useNavigationRail) {
           NavigationRail {
             railTabs.forEach { tab ->
-              val selected = currentRoute == tab.route
+              val selected =
+                currentRoute == tab.route ||
+                  (tab.route == AppRoutes.DISCOVER &&
+                    currentRoute == AppRoutes.CATEGORY_CANDIDATES)
               NavigationRailItem(
                 selected = selected,
                 onClick = { navigateTopLevel(tab.route) },
                 icon = {
-                  Icon(
-                    imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                    contentDescription = tab.label,
-                  )
+                  val showBadge = tab.route == AppRoutes.SUPPORT && totalSupportUnreadCount > 0
+                  BadgedBox(
+                    badge = {
+                      if (showBadge) {
+                        Badge { Text(totalSupportUnreadCount.toString()) }
+                      }
+                    }
+                  ) {
+                    Icon(
+                      imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                      contentDescription = tab.label,
+                    )
+                  }
                 },
                 label = { Text(tab.label) },
                 modifier = Modifier.testTag(tab.testTag),
@@ -584,6 +690,10 @@ private fun MainFixNearShell(
                 viewModel.inspectBooking(bookingId)
                 navController.navigate(AppRoutes.bookingDetail(bookingId))
               },
+              registeredSkillPersonsCount =
+                (allTechniciansNearToFarState as? UiState.Success)?.data?.size
+                  ?: (techniciansState as? UiState.Success)?.data?.size
+                  ?: 0,
             )
           }
 
@@ -641,6 +751,32 @@ private fun MainFixNearShell(
             )
           }
 
+          composable(AppRoutes.SUPPORT) {
+            SupportScreen(
+              isSignedIn = viewModel.isSignedIn,
+              isBusy = isBusy,
+              conversationsState = supportConversationsState,
+              activeConversation = activeSupportConversation,
+              messagesState = supportMessagesState,
+              pendingMessages = pendingSupportMessages,
+              onBack = {
+                viewModel.openSupportConversation(null)
+                if (!navController.popBackStack()) {
+                  navigateTopLevel(AppRoutes.DISCOVER)
+                }
+              },
+              onSignInClick = { triggerGoogleSignIn(AppRoutes.SUPPORT) },
+              onSelectConversation = viewModel::openSupportConversation,
+              onStartNewConversation = { cat, subj, type, txt, bytes, name, mime, dur ->
+                viewModel.startNewSupportConversation(cat, subj, type, txt, bytes, name, mime, dur)
+              },
+              onSendMessage = viewModel::sendUserSupportMessage,
+              onRetryPending = viewModel::retryPendingSupportMessage,
+              onDismissPending = viewModel::dismissPendingSupportMessage,
+              onMarkActiveRead = viewModel::markActiveSupportConversationRead,
+            )
+          }
+
           composable(AppRoutes.PRO_HUB) {
             ProHubScreen(
               isSignedIn = viewModel.isSignedIn,
@@ -682,7 +818,7 @@ private fun MainFixNearShell(
               savedTechnicians = savedTechnicians,
               categories = categories,
               myComplaintsState = myComplaintsState,
-              isAdmin = viewModel.isAdmin,
+              isAdmin = isAdmin,
               isBusy = isBusy,
               onUpdateGuestArea = viewModel::updateGuestArea,
               onRequestLocation = requestLocationAndSync,
@@ -707,8 +843,10 @@ private fun MainFixNearShell(
               onToggleSavedTechnician = viewModel::toggleSavedTechnician,
               onOpenProHub = { navigateTopLevel(AppRoutes.PRO_HUB) },
               onOpenSuperAdmin = {
-                if (viewModel.isAdmin) navigateTopLevel(AppRoutes.SUPER_ADMIN)
+                if (isAdmin) navigateTopLevel(AppRoutes.SUPER_ADMIN)
               },
+              onOpenSupport = { navController.navigate(AppRoutes.SUPPORT) },
+              supportUnreadCount = totalSupportUnreadCount,
               onSignOut = {
                 viewModel.setLiveBroadcastActive(false)
                 signOutUser(credentialManager = credentialManager, scope = scope)
@@ -733,7 +871,7 @@ private fun MainFixNearShell(
           }
 
           composable(AppRoutes.SUPER_ADMIN) {
-            if (viewModel.isAdmin) {
+            if (isAdmin) {
               SuperAdminScreen(
                 adminUsersState = adminUsersState,
                 adminTechniciansState = adminTechniciansState,
@@ -749,6 +887,17 @@ private fun MainFixNearShell(
                 onSaveCategory = viewModel::saveCategoryAdmin,
                 onUpdateUser = viewModel::updateUserAdmin,
                 onResolveComplaint = viewModel::resolveComplaintAdmin,
+                supportConversationsState = adminSupportConversationsState,
+                activeSupportConversation = adminActiveSupportConversation,
+                supportMessagesState = adminSupportMessagesState,
+                supportUnreadCount = adminTotalSupportUnreadCount,
+                currentAdminEmail = firebaseUser?.email ?: "admin-skillconnect@orionfx.net",
+                onSelectSupportConversation = viewModel::openAdminSupportConversation,
+                onSendSupportAdminReply = { conv, text, type, bytes, name, mime ->
+                  viewModel.sendAdminSupportReply(conv, text, type, bytes, name, mime)
+                },
+                onUpdateSupportStatus = viewModel::updateSupportConversationAdmin,
+                onMarkSupportReadAdmin = viewModel::markAdminSupportConversationRead,
               )
             } else {
               Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

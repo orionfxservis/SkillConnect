@@ -1,0 +1,79 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSupportAdmin() {
+      return isSignedIn() && (
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        ('role' in request.auth.token && request.auth.token.role == 'admin') ||
+        (
+          'email_verified' in request.auth.token &&
+          request.auth.token.email_verified == true &&
+          'email' in request.auth.token &&
+          request.auth.token.email is string &&
+          request.auth.token.email.lower() == 'admin-skillconnect@orionfx.net'
+        )
+      );
+    }
+
+    function isConversationOwner(conversationId) {
+      return isSignedIn() &&
+             conversationId.matches('^sc_' + request.auth.uid + '--[a-zA-Z0-9_-]+$');
+    }
+
+    match /support-attachments/{conversationId}/{fileName} {
+      allow get: if isSignedIn() && (
+        isSupportAdmin() ||
+        (
+          isConversationOwner(conversationId) &&
+          resource != null &&
+          resource.metadata != null &&
+          resource.metadata.ownerUid == request.auth.uid
+        )
+      );
+
+      allow list: if isSupportAdmin();
+
+      allow create: if isSignedIn() &&
+                       fileName.matches('^[a-zA-Z0-9._-]{3,120}$') &&
+                       request.resource != null &&
+                       request.resource.contentType is string &&
+                       (
+                         (
+                           request.resource.contentType.matches('^image/(jpeg|jpg|png|webp)$') &&
+                           request.resource.size > 0 &&
+                           request.resource.size <= 5 * 1024 * 1024
+                         ) ||
+                         (
+                           request.resource.contentType.matches('^audio/(mp4|m4a|x-m4a|aac|mpeg|ogg|webm|3gpp)$') &&
+                           request.resource.size > 0 &&
+                           request.resource.size <= 5 * 1024 * 1024
+                         ) ||
+                         (
+                           request.resource.contentType == 'application/pdf' &&
+                           request.resource.size > 0 &&
+                           request.resource.size <= 10 * 1024 * 1024
+                         )
+                       ) &&
+                       request.resource.metadata != null &&
+                       request.resource.metadata.conversationId == conversationId &&
+                       request.resource.metadata.uploadedBy == request.auth.uid &&
+                       (
+                         isSupportAdmin() ||
+                         (
+                           isConversationOwner(conversationId) &&
+                           request.resource.metadata.ownerUid == request.auth.uid
+                         )
+                       );
+
+      allow update, delete: if false;
+    }
+  }
+}

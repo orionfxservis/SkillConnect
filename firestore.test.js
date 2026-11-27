@@ -566,6 +566,188 @@ test("Verified admin-skillconnect@orionfx.net can list all 8 Admin Console colle
   await assertSucceeds(adminDb.collection("banners").get());
   await assertSucceeds(adminDb.collection("payments").get());
   await assertSucceeds(adminDb.collection("provider_subscriptions").get());
+  await assertSucceeds(adminDb.collection("support_conversations").get());
+  await assertSucceeds(adminDb.collection("support_messages").get());
 });
+
+test("In-App Help & Support isolates user tickets, blocks senderRole/assignedAdminId tampering, allows admin claim replies & status workflow, and validates readAt", async () => {
+  const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+  const otherDb = testEnv.authenticatedContext(OTHER_UID).firestore();
+  const customClaimAdminDb = testEnv.authenticatedContext("custom_claim_admin", {
+    admin: true,
+    email_verified: true,
+  }).firestore();
+  const ts = pastDate(2000);
+  const convId = `sc_${CLIENT_UID}--1700000001_ab12`;
+
+  const validConv = {
+    conversationId: convId,
+    userId: CLIENT_UID,
+    userName: "Alice",
+    userEmail: "alice@example.com",
+    accountType: "Customer",
+    issueCategory: "Booking Problem",
+    subject: "Electrician did not confirm time",
+    status: "Open",
+    assignedAdminId: "",
+    lastMessage: "Please help with my booking.",
+    lastMessageAt: ts,
+    unreadCountUser: 0,
+    unreadCountAdmin: 1,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+
+  // User cannot spoof conversationId owned by someone else or pre-assign an admin
+  await assertFails(
+    clientDb.collection("support_conversations").doc(`sc_${OTHER_UID}--123`).set({
+      ...validConv,
+      conversationId: `sc_${OTHER_UID}--123`,
+    })
+  );
+  await assertFails(
+    clientDb.collection("support_conversations").doc(convId).set({
+      ...validConv,
+      assignedAdminId: "custom_claim_admin",
+    })
+  );
+
+  // Valid atomic batch: create conversation + initial user text message
+  const msg1Id = "msg_1700000001_u1";
+  const createBatch = clientDb.batch();
+  createBatch.set(clientDb.collection("support_conversations").doc(convId), validConv);
+  createBatch.set(clientDb.collection("support_messages").doc(msg1Id), {
+    messageId: msg1Id,
+    conversationId: convId,
+    conversationOwnerId: CLIENT_UID,
+    senderId: CLIENT_UID,
+    senderName: "Alice",
+    senderRole: "User",
+    messageType: "text",
+    text: "Please help with my booking.",
+    attachmentUrl: "",
+    attachmentPath: "",
+    attachmentName: "",
+    attachmentType: "",
+    duration: 0,
+    createdAt: ts,
+  });
+  await assertSucceeds(createBatch.commit());
+
+  // Other user cannot get or list Alice's conversation or messages
+  await assertFails(otherDb.collection("support_conversations").doc(convId).get());
+  await assertFails(otherDb.collection("support_messages").doc(msg1Id).get());
+  await assertFails(
+    otherDb.collection("support_messages").where("conversationId", "==", convId).where("conversationOwnerId", "==", CLIENT_UID).get()
+  );
+
+  // Alice can read & list her own conversation & messages
+  await assertSucceeds(clientDb.collection("support_conversations").doc(convId).get());
+  await assertSucceeds(
+    clientDb.collection("support_conversations").where("userId", "==", CLIENT_UID).get()
+  );
+  await assertSucceeds(
+    clientDb.collection("support_messages").where("conversationId", "==", convId).where("conversationOwnerId", "==", CLIENT_UID).get()
+  );
+
+  // Alice cannot impersonate Admin or assign admin or resolve her own ticket
+  await assertFails(
+    clientDb.collection("support_messages").doc("msg_spoof").set({
+      messageId: "msg_spoof",
+      conversationId: convId,
+      conversationOwnerId: CLIENT_UID,
+      senderId: CLIENT_UID,
+      senderName: "Support",
+      senderRole: "Admin",
+      messageType: "text",
+      text: "Fake admin reply",
+      attachmentUrl: "",
+      attachmentPath: "",
+      attachmentName: "",
+      attachmentType: "",
+      duration: 0,
+      createdAt: pastDate(1500),
+    })
+  );
+  await assertFails(
+    clientDb.collection("support_conversations").doc(convId).update({
+      assignedAdminId: CLIENT_UID,
+      updatedAt: pastDate(1500),
+    })
+  );
+  await assertFails(
+    clientDb.collection("support_conversations").doc(convId).update({
+      status: "Resolved",
+      updatedAt: pastDate(1500),
+    })
+  );
+
+  // Alice can attach an image with valid storage path inside her conversation
+  const msgImgId = "msg_1700000002_img";
+  await assertSucceeds(
+    clientDb.collection("support_messages").doc(msgImgId).set({
+      messageId: msgImgId,
+      conversationId: convId,
+      conversationOwnerId: CLIENT_UID,
+      senderId: CLIENT_UID,
+      senderName: "Alice",
+      senderRole: "User",
+      messageType: "image",
+      text: "Screenshot attached",
+      attachmentUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/screenshot.jpg",
+      attachmentPath: `support-attachments/${convId}/screenshot_1.jpg`,
+      attachmentName: "screenshot_1.jpg",
+      attachmentType: "image/jpeg",
+      duration: 0,
+      createdAt: pastDate(1400),
+    })
+  );
+
+  // Admin with custom claim can read, reply as Admin, increment unreadCountUser, and set Pending/Resolved
+  const adminReplyId = "msg_1700000003_adm";
+  const adminBatch = customClaimAdminDb.batch();
+  adminBatch.set(customClaimAdminDb.collection("support_messages").doc(adminReplyId), {
+    messageId: adminReplyId,
+    conversationId: convId,
+    conversationOwnerId: CLIENT_UID,
+    senderId: "custom_claim_admin",
+    senderName: "Support Team",
+    senderRole: "Admin",
+    messageType: "text",
+    text: "We checked with your technician and updated your slot.",
+    attachmentUrl: "",
+    attachmentPath: "",
+    attachmentName: "",
+    attachmentType: "",
+    duration: 0,
+    createdAt: pastDate(1000),
+  });
+  adminBatch.update(customClaimAdminDb.collection("support_conversations").doc(convId), {
+    assignedAdminId: "custom_claim_admin",
+    status: "Pending",
+    lastMessage: "We checked with your technician and updated your slot.",
+    lastMessageAt: pastDate(1000),
+    unreadCountUser: 1,
+    unreadCountAdmin: 0,
+    updatedAt: pastDate(1000),
+  });
+  await assertSucceeds(adminBatch.commit());
+
+  // Alice marks Admin reply as read and clears her unreadCountUser
+  const readBatch = clientDb.batch();
+  readBatch.update(clientDb.collection("support_messages").doc(adminReplyId), {
+    readAt: pastDate(500),
+  });
+  readBatch.update(clientDb.collection("support_conversations").doc(convId), {
+    unreadCountUser: 0,
+    updatedAt: pastDate(500),
+  });
+  await assertSucceeds(readBatch.commit());
+
+  // Nobody can delete support messages or conversations
+  await assertFails(clientDb.collection("support_messages").doc(msg1Id).delete());
+  await assertFails(customClaimAdminDb.collection("support_conversations").doc(convId).delete());
+});
+
 
 

@@ -118,6 +118,11 @@
             <span class="nav-text">Bookings &amp; Reports</span>
             <span class="nav-badge amber hidden" id="badgeOpenComplaints">0</span>
           </button>
+          <button type="button" class="admin-nav-btn" data-admin-section="support_inbox">
+            <span class="nav-icon">&#128172;</span>
+            <span class="nav-text">Support Inbox</span>
+            <span class="nav-badge hidden" id="badgeSupportUnread">0</span>
+          </button>
 
           <div class="admin-sidebar-footer">
             <div class="admin-meta-card">
@@ -215,6 +220,16 @@
                 </div>
 
                 <div id="homeDefaultBody" class="home-default-stack">
+                  <div class="sc-registered-pros-wrap">
+                    <div class="sc-registered-pros-badge" id="registeredProsBadgeWrap">
+                      <span class="sc-registered-pros-label">
+                        <img src="assets/icons/verified.svg" alt="" class="sc-registered-pros-icon" />
+                        <span>Registered Skill Persons</span>
+                      </span>
+                      <span class="sc-registered-pros-count" id="registeredProsCount">0</span>
+                    </div>
+                  </div>
+
                   <section class="sc-categories-section">
                     <div class="sc-section-header">
                       <h2 class="sc-section-title">Service Categories</h2>
@@ -305,6 +320,18 @@
                 </div>
               </div>
               <div class="subpage-body" id="bookingsHistoryContainer"></div>
+            </section>
+
+            <!-- ==================== MOBILE VIEW: SUPPORT ==================== -->
+            <section class="view-screen" id="view-support" aria-label="Help &amp; Support">
+              <div class="subpage-header">
+                <button type="button" class="subpage-back-btn" id="supportBackNavBtn">&#8592;</button>
+                <div>
+                  <h2 class="subpage-title" id="supportPageTitle">Help &amp; Support</h2>
+                  <p class="subpage-subtitle" id="supportPageSubtitle">Direct in-app support messages</p>
+                </div>
+              </div>
+              <div class="subpage-body" id="mobileSupportBody"></div>
             </section>
 
             <!-- ==================== MOBILE VIEW: PROFILE ==================== -->

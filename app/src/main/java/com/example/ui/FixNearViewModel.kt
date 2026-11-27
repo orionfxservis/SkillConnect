@@ -7,10 +7,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.FixNearRepository
 import com.example.data.LocationHelper
 import com.example.data.SubscriptionPreferencesStore
+import com.example.data.SupportRepository
 import com.example.model.BookingStatus
 import com.example.model.ChatMessage
 import com.example.model.ComplaintStatus
 import com.example.model.Coordinates
+import com.example.model.PendingSupportMessage
 import com.example.model.ProviderSubscriptionStatus
 import com.example.model.ProviderVerificationDoc
 import com.example.model.ServiceBooking
@@ -22,6 +24,12 @@ import com.example.model.ServiceReview
 import com.example.model.SubscriptionFeatureFlags
 import com.example.model.SubscriptionRulesCalculator
 import com.example.model.SubscriptionTier
+import com.example.model.SupportConversation
+import com.example.model.SupportConversationStatus
+import com.example.model.SupportIssueCategory
+import com.example.model.SupportMessage
+import com.example.model.SupportMessageType
+import com.example.model.SupportSenderRole
 import com.example.model.TechnicianProfile
 import com.example.model.TechnicianRegistrationInput
 import com.example.model.UiState
@@ -29,6 +37,7 @@ import com.example.model.UserProfile
 import com.example.model.VerificationStatus
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.messaging.FirebaseMessaging
 import java.util.Calendar
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -44,6 +53,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 data class TechnicianWithDistance(
   val technician: TechnicianProfile,
@@ -84,14 +94,28 @@ class FixNearViewModel(
   val currentUserId: String?,
   private val firebaseUser: FirebaseUser?,
   private val subscriptionStore: SubscriptionPreferencesStore? = null,
+  private val supportRepository: SupportRepository? = null,
 ) : ViewModel() {
 
   val isSignedIn: Boolean = !currentUserId.isNullOrBlank() && firebaseUser != null
 
-  val isAdmin: Boolean =
+  private val isBootstrapEmailAdmin: Boolean =
     firebaseUser != null &&
       firebaseUser.email.equals(SUPER_ADMIN_EMAIL, ignoreCase = true) &&
       firebaseUser.isEmailVerified
+
+  private val _hasAdminClaim = MutableStateFlow(false)
+  val isAdminFlow: StateFlow<Boolean> =
+    _hasAdminClaim
+      .map { it || isBootstrapEmailAdmin }
+      .stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = isBootstrapEmailAdmin,
+      )
+
+  val isAdmin: Boolean
+    get() = isBootstrapEmailAdmin || _hasAdminClaim.value
 
   private val _guestArea = MutableStateFlow("Karachi, Sindh")
   val guestArea: StateFlow<String> = _guestArea.asStateFlow()
@@ -151,6 +175,25 @@ class FixNearViewModel(
     if (firebaseUser != null) {
       viewModelScope.launch {
         repository.ensureUserProfile(firebaseUser)
+      }
+      viewModelScope.launch {
+        runCatching {
+          val claims = firebaseUser.getIdToken(false).await().claims
+          val claimAdmin =
+            (claims["admin"] as? Boolean == true) ||
+              (claims["role"] as? String)?.equals("admin", ignoreCase = true) == true
+          _hasAdminClaim.value = claimAdmin
+        }
+      }
+      if (supportRepository != null) {
+        viewModelScope.launch {
+          runCatching {
+            val fcmToken = FirebaseMessaging.getInstance().token.await()
+            if (!fcmToken.isNullOrBlank()) {
+              supportRepository.registerFcmToken(firebaseUser.uid, fcmToken)
+            }
+          }
+        }
       }
     }
   }
@@ -426,42 +469,167 @@ class FixNearViewModel(
       }
       .toUiStateFlow("messages")
 
-  // --- Super Admin StateFlows (strictly guarded by isAdmin) ---
+  // --- Super Admin StateFlows (strictly guarded by isAdminFlow) ---
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   val adminUsersState: StateFlow<UiState<List<UserProfile>>> =
-    if (isAdmin) repository.observeAllUsersAdmin().toUiStateFlow("admin users")
-    else MutableStateFlow(UiState.Success(emptyList()))
+    isAdminFlow
+      .flatMapLatest { admin ->
+        if (admin) repository.observeAllUsersAdmin().map<List<UserProfile>, UiState<List<UserProfile>>> { UiState.Success(it) }
+          .catch { emit(UiState.Error(it.message ?: "Failed to load admin users")) }
+        else flowOf(UiState.Success(emptyList()))
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   val adminTechniciansState: StateFlow<UiState<List<TechnicianProfile>>> =
-    if (isAdmin) repository.observeAllTechniciansAdmin().toUiStateFlow("admin technicians")
-    else MutableStateFlow(UiState.Success(emptyList()))
+    isAdminFlow
+      .flatMapLatest { admin ->
+        if (admin) repository.observeAllTechniciansAdmin().map<List<TechnicianProfile>, UiState<List<TechnicianProfile>>> { UiState.Success(it) }
+          .catch { emit(UiState.Error(it.message ?: "Failed to load admin technicians")) }
+        else flowOf(UiState.Success(emptyList()))
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   val adminCategoriesState: StateFlow<UiState<List<ServiceCategoryEntity>>> =
-    if (isAdmin) repository.observeAllCategoriesAdmin().toUiStateFlow("admin categories")
-    else MutableStateFlow(UiState.Success(emptyList()))
+    isAdminFlow
+      .flatMapLatest { admin ->
+        if (admin) repository.observeAllCategoriesAdmin().map<List<ServiceCategoryEntity>, UiState<List<ServiceCategoryEntity>>> { UiState.Success(it) }
+          .catch { emit(UiState.Error(it.message ?: "Failed to load admin categories")) }
+        else flowOf(UiState.Success(emptyList()))
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   val adminBookingsState: StateFlow<UiState<List<ServiceBooking>>> =
-    if (isAdmin) repository.observeAllBookingsAdmin().toUiStateFlow("admin bookings")
-    else MutableStateFlow(UiState.Success(emptyList()))
+    isAdminFlow
+      .flatMapLatest { admin ->
+        if (admin) repository.observeAllBookingsAdmin().map<List<ServiceBooking>, UiState<List<ServiceBooking>>> { UiState.Success(it) }
+          .catch { emit(UiState.Error(it.message ?: "Failed to load admin bookings")) }
+        else flowOf(UiState.Success(emptyList()))
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   val adminComplaintsState: StateFlow<UiState<List<ServiceComplaint>>> =
-    if (isAdmin) repository.observeAllComplaintsAdmin().toUiStateFlow("admin complaints")
-    else MutableStateFlow(UiState.Success(emptyList()))
+    isAdminFlow
+      .flatMapLatest { admin ->
+        if (admin) repository.observeAllComplaintsAdmin().map<List<ServiceComplaint>, UiState<List<ServiceComplaint>>> { UiState.Success(it) }
+          .catch { emit(UiState.Error(it.message ?: "Failed to load admin complaints")) }
+        else flowOf(UiState.Success(emptyList()))
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
 
   private val _adminInspectedTechId = MutableStateFlow<String?>(null)
 
   @OptIn(ExperimentalCoroutinesApi::class)
   val adminInspectedVerificationDocState: StateFlow<UiState<ProviderVerificationDoc?>> =
-    if (isAdmin) {
-      _adminInspectedTechId
-        .flatMapLatest { techId ->
-          if (techId.isNullOrBlank()) flowOf(null)
-          else repository.observeVerificationDocAdmin(techId)
-        }
-        .toUiStateFlow("admin verification doc")
+    combine(isAdminFlow, _adminInspectedTechId) { admin, techId -> admin to techId }
+      .flatMapLatest { (admin, techId) ->
+        if (!admin || techId.isNullOrBlank()) flowOf(UiState.Success(null))
+        else repository.observeVerificationDocAdmin(techId)
+          .map<ProviderVerificationDoc?, UiState<ProviderVerificationDoc?>> { UiState.Success(it) }
+          .catch { emit(UiState.Error(it.message ?: "Failed to load verification doc")) }
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(null))
+
+  // --- Help & Support StateFlows ---
+
+  val supportConversationsState: StateFlow<UiState<List<SupportConversation>>> =
+    if (currentUserId != null && supportRepository != null) {
+      supportRepository.observeUserConversations(currentUserId).toUiStateFlow("support conversations")
     } else {
-      MutableStateFlow(UiState.Success(null))
+      MutableStateFlow(UiState.Success(emptyList()))
     }
+
+  val totalSupportUnreadCount: StateFlow<Int> =
+    supportConversationsState
+      .map { state ->
+        (state as? UiState.Success)?.data?.sumOf { it.unreadCountUser } ?: 0
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0)
+
+  private val _activeSupportConversationId = MutableStateFlow<String?>(null)
+  val activeSupportConversationId: StateFlow<String?> = _activeSupportConversationId.asStateFlow()
+
+  val activeSupportConversation: StateFlow<SupportConversation?> =
+    combine(supportConversationsState, _activeSupportConversationId) { convState, activeId ->
+        val list = (convState as? UiState.Success)?.data ?: emptyList()
+        if (activeId.isNullOrBlank()) null
+        else list.firstOrNull { it.resolvedId == activeId }
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val supportMessagesState: StateFlow<UiState<List<SupportMessage>>> =
+    combine(_activeSupportConversationId, activeSupportConversation) { activeId, conv ->
+        activeId to conv
+      }
+      .flatMapLatest { (activeId, conv) ->
+        val ownerId = conv?.userId?.ifBlank { currentUserId ?: "" } ?: (currentUserId ?: "")
+        if (activeId.isNullOrBlank() || ownerId.isBlank() || supportRepository == null) {
+          flowOf(emptyList())
+        } else {
+          supportRepository.observeMessages(
+            conversationId = activeId,
+            conversationOwnerId = ownerId,
+            isAdmin = false,
+          )
+        }
+      }
+      .toUiStateFlow("support messages")
+
+  private val _pendingSupportMessages = MutableStateFlow<List<PendingSupportMessage>>(emptyList())
+  val pendingSupportMessages: StateFlow<List<PendingSupportMessage>> =
+    _pendingSupportMessages.asStateFlow()
+
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val adminSupportConversationsState: StateFlow<UiState<List<SupportConversation>>> =
+    isAdminFlow
+      .flatMapLatest { admin ->
+        if (admin && supportRepository != null) {
+          supportRepository
+            .observeAllConversationsAdmin()
+            .map<List<SupportConversation>, UiState<List<SupportConversation>>> { UiState.Success(it) }
+            .catch { emit(UiState.Error(it.message ?: "Failed to load support inbox")) }
+        } else {
+          flowOf(UiState.Success(emptyList()))
+        }
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
+
+  val adminTotalSupportUnreadCount: StateFlow<Int> =
+    adminSupportConversationsState
+      .map { state ->
+        (state as? UiState.Success)?.data?.sumOf { it.unreadCountAdmin } ?: 0
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), 0)
+
+  private val _adminActiveSupportConvId = MutableStateFlow<String?>(null)
+  val adminActiveSupportConvId: StateFlow<String?> = _adminActiveSupportConvId.asStateFlow()
+
+  val adminActiveSupportConversation: StateFlow<SupportConversation?> =
+    combine(adminSupportConversationsState, _adminActiveSupportConvId) { convState, activeId ->
+        val list = (convState as? UiState.Success)?.data.orEmpty()
+        list.firstOrNull { it.conversationId == activeId }
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val adminSupportMessagesState: StateFlow<UiState<List<SupportMessage>>> =
+    combine(isAdminFlow, _adminActiveSupportConvId) { admin, convId -> admin to convId }
+      .flatMapLatest { (admin, convId) ->
+        if (!admin || convId.isNullOrBlank() || supportRepository == null) {
+          flowOf(UiState.Success(emptyList()))
+        } else {
+          supportRepository
+            .observeMessages(conversationId = convId, conversationOwnerId = "", isAdmin = true)
+            .map<List<SupportMessage>, UiState<List<SupportMessage>>> { UiState.Success(it) }
+            .catch { emit(UiState.Error(it.message ?: "Failed to load conversation messages")) }
+        }
+      }
+      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
 
   // --- User & Filter Actions ---
 
@@ -917,6 +1085,319 @@ class FixNearViewModel(
         .onFailure {
           _actionMessage.value = it.localizedMessage ?: "Failed to update complaint"
         }
+    }
+  }
+
+  // --- In-App Help & Support Actions ---
+
+  fun openSupportConversation(conversationId: String?) {
+    _activeSupportConversationId.value = conversationId
+  }
+
+  fun openAdminSupportConversation(conversationId: String?) {
+    _adminActiveSupportConvId.value = conversationId
+  }
+
+  fun startNewSupportConversation(
+    issueCategory: SupportIssueCategory,
+    subject: String,
+    initialMessageType: SupportMessageType,
+    text: String,
+    attachmentBytes: ByteArray? = null,
+    attachmentName: String = "",
+    attachmentMime: String = "",
+    durationSec: Int = 0,
+    onCreated: (String) -> Unit = {},
+  ) {
+    val repo = supportRepository ?: return
+    val uid = currentUserId ?: return
+    val profile = (userProfileState.value as? UiState.Success)?.data
+    val tech = (myTechnicianState.value as? UiState.Success)?.data
+    val userName =
+      tech?.fullName?.takeIf { it.isNotBlank() }
+        ?: profile?.displayName?.takeIf { it.isNotBlank() }
+        ?: firebaseUser?.displayName
+        ?: "SkillConnect User"
+    val userEmail =
+      profile?.email?.takeIf { it.isNotBlank() }
+        ?: firebaseUser?.email
+        ?: profile?.phoneNumber
+        ?: ""
+    val accountType =
+      if (tech != null || profile?.enrolledTechnician == true) "Service Provider" else "Customer"
+
+    viewModelScope.launch {
+      _isBusy.value = true
+      val convId = repo.newConversationId(uid)
+      val msgId = repo.newMessageId()
+
+      var uploadedUrl = ""
+      var uploadedPath = ""
+      if (initialMessageType != SupportMessageType.TEXT) {
+        if (attachmentBytes == null || attachmentBytes.isEmpty()) {
+          _isBusy.value = false
+          _actionMessage.value = "Selected attachment could not be read."
+          return@launch
+        }
+        val uploadResult =
+          repo.uploadAttachment(
+            conversationId = convId,
+            ownerUid = uid,
+            fileName = attachmentName.ifBlank { "support_${System.currentTimeMillis()}" },
+            mimeType = attachmentMime,
+            bytes = attachmentBytes,
+          )
+        uploadResult.onFailure {
+          _isBusy.value = false
+          _actionMessage.value = it.localizedMessage ?: "Attachment upload failed. Check connection & try again."
+          return@launch
+        }
+        val pair = uploadResult.getOrThrow()
+        uploadedUrl = pair.first
+        uploadedPath = pair.second
+      }
+
+      val result =
+        repo.createConversationAndInitialMessage(
+          conversationId = convId,
+          messageId = msgId,
+          userName = userName,
+          userEmail = userEmail,
+          accountType = accountType,
+          issueCategory = issueCategory,
+          subject = subject.ifBlank { issueCategory.label },
+          messageType = initialMessageType,
+          text = text,
+          attachmentUrl = uploadedUrl,
+          attachmentPath = uploadedPath,
+          attachmentName = attachmentName,
+          attachmentType = attachmentMime,
+          durationSec = durationSec,
+        )
+      _isBusy.value = false
+      result
+        .onSuccess {
+          _activeSupportConversationId.value = convId
+          onCreated(convId)
+        }
+        .onFailure {
+          _actionMessage.value = it.localizedMessage ?: "Failed to start support conversation."
+        }
+    }
+  }
+
+  fun sendUserSupportMessage(
+    conversation: SupportConversation,
+    messageType: SupportMessageType,
+    text: String,
+    attachmentBytes: ByteArray? = null,
+    attachmentName: String = "",
+    attachmentMime: String = "",
+    durationSec: Int = 0,
+  ) {
+    val repo = supportRepository ?: return
+    val msgId = repo.newMessageId()
+    val pending =
+      PendingSupportMessage(
+        messageId = msgId,
+        conversationId = conversation.resolvedId,
+        messageType = messageType,
+        text = text.trim(),
+        localFileBytes = attachmentBytes,
+        attachmentName = attachmentName,
+        attachmentType = attachmentMime,
+        durationSec = durationSec,
+        isSending = true,
+        errorMessage = null,
+      )
+    _pendingSupportMessages.value = _pendingSupportMessages.value + pending
+    dispatchPendingSupportMessage(conversation, pending)
+  }
+
+  fun retryPendingSupportMessage(conversation: SupportConversation, messageId: String) {
+    val item = _pendingSupportMessages.value.firstOrNull { it.messageId == messageId } ?: return
+    val updated = item.copy(isSending = true, errorMessage = null)
+    _pendingSupportMessages.value =
+      _pendingSupportMessages.value.map { if (it.messageId == messageId) updated else it }
+    dispatchPendingSupportMessage(conversation, updated)
+  }
+
+  fun dismissPendingSupportMessage(messageId: String) {
+    _pendingSupportMessages.value =
+      _pendingSupportMessages.value.filterNot { it.messageId == messageId }
+  }
+
+  private fun dispatchPendingSupportMessage(
+    conversation: SupportConversation,
+    pending: PendingSupportMessage,
+  ) {
+    val repo = supportRepository ?: return
+    val profile = (userProfileState.value as? UiState.Success)?.data
+    val tech = (myTechnicianState.value as? UiState.Success)?.data
+    val senderName =
+      tech?.fullName?.takeIf { it.isNotBlank() }
+        ?: profile?.displayName?.takeIf { it.isNotBlank() }
+        ?: firebaseUser?.displayName
+        ?: "You"
+
+    viewModelScope.launch {
+      var uploadedUrl = ""
+      var uploadedPath = ""
+
+      if (pending.messageType != SupportMessageType.TEXT) {
+        val bytes = pending.localFileBytes
+        if (bytes == null || bytes.isEmpty()) {
+          _pendingSupportMessages.value =
+            _pendingSupportMessages.value.map {
+              if (it.messageId == pending.messageId) {
+                it.copy(isSending = false, errorMessage = "Attachment data missing. Tap Delete & re-attach.")
+              } else {
+                it
+              }
+            }
+          return@launch
+        }
+        val uploadResult =
+          repo.uploadAttachment(
+            conversationId = conversation.resolvedId,
+            ownerUid = conversation.userId,
+            fileName = pending.attachmentName.ifBlank { "attachment_${System.currentTimeMillis()}" },
+            mimeType = pending.attachmentType,
+            bytes = bytes,
+          )
+        if (uploadResult.isFailure) {
+          val msg = uploadResult.exceptionOrNull()?.localizedMessage ?: "Upload failed"
+          _pendingSupportMessages.value =
+            _pendingSupportMessages.value.map {
+              if (it.messageId == pending.messageId) it.copy(isSending = false, errorMessage = msg)
+              else it
+            }
+          return@launch
+        }
+        val pair = uploadResult.getOrThrow()
+        uploadedUrl = pair.first
+        uploadedPath = pair.second
+      }
+
+      val result =
+        repo.sendMessage(
+          conversation = conversation,
+          messageId = pending.messageId,
+          senderName = senderName,
+          senderRole = SupportSenderRole.USER,
+          messageType = pending.messageType,
+          text = pending.text,
+          attachmentUrl = uploadedUrl,
+          attachmentPath = uploadedPath,
+          attachmentName = pending.attachmentName,
+          attachmentType = pending.attachmentType,
+          durationSec = pending.durationSec,
+        )
+
+      result
+        .onSuccess {
+          _pendingSupportMessages.value =
+            _pendingSupportMessages.value.filterNot { it.messageId == pending.messageId }
+        }
+        .onFailure { err ->
+          _pendingSupportMessages.value =
+            _pendingSupportMessages.value.map {
+              if (it.messageId == pending.messageId) {
+                it.copy(isSending = false, errorMessage = err.localizedMessage ?: "Failed to send")
+              } else {
+                it
+              }
+            }
+        }
+    }
+  }
+
+  fun markActiveSupportConversationRead() {
+    val repo = supportRepository ?: return
+    val conv = activeSupportConversation.value ?: return
+    val msgs = (supportMessagesState.value as? UiState.Success)?.data ?: return
+    viewModelScope.launch {
+      repo.markConversationReadByUser(conv, msgs)
+    }
+  }
+
+  fun sendAdminSupportReply(
+    conversation: SupportConversation,
+    text: String,
+    messageType: SupportMessageType = SupportMessageType.TEXT,
+    attachmentBytes: ByteArray? = null,
+    attachmentName: String = "",
+    attachmentMime: String = "",
+    durationSec: Int = 0,
+    onSent: () -> Unit = {},
+  ) {
+    if (!isAdmin) return
+    val repo = supportRepository ?: return
+    viewModelScope.launch {
+      _isBusy.value = true
+      var url = ""
+      var path = ""
+      if (messageType != SupportMessageType.TEXT && attachmentBytes != null) {
+        val up =
+          repo.uploadAttachment(
+            conversationId = conversation.resolvedId,
+            ownerUid = conversation.userId,
+            fileName = attachmentName.ifBlank { "admin_reply_${System.currentTimeMillis()}" },
+            mimeType = attachmentMime,
+            bytes = attachmentBytes,
+          )
+        if (up.isFailure) {
+          _isBusy.value = false
+          _actionMessage.value = up.exceptionOrNull()?.localizedMessage ?: "Failed to upload attachment"
+          return@launch
+        }
+        url = up.getOrThrow().first
+        path = up.getOrThrow().second
+      }
+
+      val result =
+        repo.sendMessage(
+          conversation = conversation,
+          messageId = repo.newMessageId(),
+          senderName = "Support Team",
+          senderRole = SupportSenderRole.ADMIN,
+          messageType = messageType,
+          text = text,
+          attachmentUrl = url,
+          attachmentPath = path,
+          attachmentName = attachmentName,
+          attachmentType = attachmentMime,
+          durationSec = durationSec,
+        )
+      _isBusy.value = false
+      result
+        .onSuccess { onSent() }
+        .onFailure { _actionMessage.value = it.localizedMessage ?: "Failed to send support reply" }
+    }
+  }
+
+  fun updateSupportConversationAdmin(
+    conversationId: String,
+    status: SupportConversationStatus,
+    assignedAdminId: String,
+  ) {
+    if (!isAdmin) return
+    val repo = supportRepository ?: return
+    viewModelScope.launch {
+      _isBusy.value = true
+      val res = repo.updateConversationAdmin(conversationId, status, assignedAdminId)
+      _isBusy.value = false
+      res
+        .onSuccess { _actionMessage.value = "Ticket updated to ${status.label}" }
+        .onFailure { _actionMessage.value = it.localizedMessage ?: "Failed to update ticket" }
+    }
+  }
+
+  fun markAdminSupportConversationRead(conversation: SupportConversation, messages: List<SupportMessage>) {
+    if (!isAdmin) return
+    val repo = supportRepository ?: return
+    viewModelScope.launch {
+      repo.markConversationReadByAdmin(conversation, messages)
     }
   }
 

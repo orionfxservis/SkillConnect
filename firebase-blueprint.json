@@ -285,6 +285,71 @@
         "renewalExpiresAtMillis", "lastPaymentId", "lastPaymentAmount",
         "approvedByAdmin", "adminRemarks", "createdAt", "updatedAt"
       ]
+    },
+    "SupportConversation": {
+      "title": "SupportConversation",
+      "description": "In-app Help & Support ticket conversation between a user (Customer or Service Provider) and SkillConnect Support Admins.",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "accountType": { "type": "string", "enum": ["Customer", "Service Provider"] },
+        "issueCategory": {
+          "type": "string",
+          "enum": [
+            "Booking Problem",
+            "Profile or Account Issue",
+            "Provider Verification",
+            "Subscription or Payment Issue",
+            "Location or GPS Problem",
+            "Technical Problem",
+            "Other Issue"
+          ]
+        },
+        "subject": { "type": "string" },
+        "status": { "type": "string", "enum": ["Open", "Pending", "Resolved"] },
+        "assignedAdminId": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "unreadCountUser": { "type": "integer" },
+        "unreadCountAdmin": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "conversationId", "userId", "userName", "userEmail", "accountType",
+        "issueCategory", "subject", "status", "assignedAdminId", "lastMessage",
+        "lastMessageAt", "unreadCountUser", "unreadCountAdmin", "createdAt", "updatedAt"
+      ]
+    },
+    "SupportMessage": {
+      "title": "SupportMessage",
+      "description": "Message inside a SupportConversation supporting text, voice recordings, images, and PDF documents.",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "conversationOwnerId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["User", "Admin"] },
+        "messageType": { "type": "string", "enum": ["text", "voice", "image", "document"] },
+        "text": { "type": "string" },
+        "attachmentUrl": { "type": "string" },
+        "attachmentPath": { "type": "string" },
+        "attachmentName": { "type": "string" },
+        "attachmentType": { "type": "string" },
+        "duration": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "readAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "messageId", "conversationId", "conversationOwnerId", "senderId", "senderName",
+        "senderRole", "messageType", "text", "attachmentUrl", "attachmentPath",
+        "attachmentName", "attachmentType", "duration", "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -331,6 +396,14 @@
     "/provider_subscriptions/{userId}": {
       "schema": { "$ref": "ProviderSubscriptionRecord" },
       "description": "Skill Person Pro plans and old-account renewal approval states."
+    },
+    "/support_conversations/{conversationId}": {
+      "schema": { "$ref": "SupportConversation" },
+      "description": "Help & Support conversations owned by users and managed by Support Admins."
+    },
+    "/support_messages/{messageId}": {
+      "schema": { "$ref": "SupportMessage" },
+      "description": "Messages belonging to support_conversations."
     }
   }
 }

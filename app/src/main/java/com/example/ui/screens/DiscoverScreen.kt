@@ -160,6 +160,7 @@ fun DiscoverScreen(
   onOpenMap: () -> Unit,
   onOpenProHub: () -> Unit,
   onOpenBooking: (String) -> Unit,
+  registeredSkillPersonsCount: Int = 0,
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
@@ -288,6 +289,54 @@ fun DiscoverScreen(
         Column(
           modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp, bottom = 4.dp),
         ) {
+          Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = EmeraldContainer,
+            border = BorderStroke(1.dp, DeepTeal.copy(alpha = 0.16f)),
+            modifier =
+              Modifier.fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .testTag("registered_skill_persons_badge"),
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.Rounded.Verified,
+                  contentDescription = null,
+                  tint = DeepTeal,
+                  modifier = Modifier.size(18.dp),
+                )
+                Text(
+                  text = "Registered Skill Persons",
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.Bold,
+                  color = OnEmeraldContainer,
+                )
+              }
+              Surface(
+                shape = RoundedCornerShape(50),
+                color = DeepTeal,
+              ) {
+                Text(
+                  text = registeredSkillPersonsCount.toString(),
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.ExtraBold,
+                  color = Color.White,
+                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
+                )
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(8.dp))
+
           Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,

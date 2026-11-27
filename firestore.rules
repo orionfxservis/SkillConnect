@@ -13,12 +13,17 @@ service cloud.firestore {
     }
 
     function isBootstrappedAdmin() {
-      return isSignedIn() &&
-             'email_verified' in request.auth.token &&
-             request.auth.token.email_verified == true &&
-             'email' in request.auth.token &&
-             request.auth.token.email is string &&
-             request.auth.token.email.lower() == 'admin-skillconnect@orionfx.net';
+      return isSignedIn() && (
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        ('role' in request.auth.token && request.auth.token.role == 'admin') ||
+        (
+          'email_verified' in request.auth.token &&
+          request.auth.token.email_verified == true &&
+          'email' in request.auth.token &&
+          request.auth.token.email is string &&
+          request.auth.token.email.lower() == 'admin-skillconnect@orionfx.net'
+        )
+      );
     }
 
     // Use isAdmin() only in single-document get/create/update/delete; use isBootstrappedAdmin() in allow list
@@ -230,6 +235,59 @@ service cloud.firestore {
              isValidTimestamp(data.updatedAt);
     }
 
+    function isValidSupportConversation(data) {
+      return data.conversationId is string && isValidId(data.conversationId) &&
+             data.userId is string && isValidId(data.userId) &&
+             data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 80 &&
+             data.userEmail is string && data.userEmail.size() <= 140 &&
+             data.accountType in ['Customer', 'Service Provider'] &&
+             data.issueCategory in [
+               'Booking Problem',
+               'Profile or Account Issue',
+               'Provider Verification',
+               'Subscription or Payment Issue',
+               'Location or GPS Problem',
+               'Technical Problem',
+               'Other Issue'
+             ] &&
+             data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 160 &&
+             data.status in ['Open', 'Pending', 'Resolved'] &&
+             data.assignedAdminId is string && data.assignedAdminId.size() <= 128 &&
+             data.lastMessage is string && data.lastMessage.size() <= 500 &&
+             isValidTimestamp(data.lastMessageAt) &&
+             data.unreadCountUser is int && data.unreadCountUser >= 0 && data.unreadCountUser <= 9999 &&
+             data.unreadCountAdmin is int && data.unreadCountAdmin >= 0 && data.unreadCountAdmin <= 9999 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSupportMessage(data) {
+      return data.messageId is string && isValidId(data.messageId) &&
+             data.conversationId is string && isValidId(data.conversationId) &&
+             data.conversationOwnerId is string && isValidId(data.conversationOwnerId) &&
+             data.senderId is string && isValidId(data.senderId) &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80 &&
+             data.senderRole in ['User', 'Admin'] &&
+             data.messageType in ['text', 'voice', 'image', 'document'] &&
+             data.text is string && data.text.size() <= 2000 &&
+             data.attachmentUrl is string && data.attachmentUrl.size() <= 2000 &&
+             data.attachmentPath is string && data.attachmentPath.size() <= 300 &&
+             data.attachmentName is string && data.attachmentName.size() <= 180 &&
+             data.attachmentType is string && data.attachmentType.size() <= 80 &&
+             data.duration is int && data.duration >= 0 && data.duration <= 600 &&
+             isValidTimestamp(data.createdAt) &&
+             (!('readAt' in data) || isValidTimestamp(data.readAt)) &&
+             (
+               (data.messageType == 'text' && data.text.size() >= 1 && data.attachmentUrl == '' && data.attachmentPath == '') ||
+               (
+                 data.messageType in ['voice', 'image', 'document'] &&
+                 data.attachmentUrl.size() >= 1 &&
+                 data.attachmentPath.matches('^support-attachments/' + data.conversationId + '/[a-zA-Z0-9._-]+$') &&
+                 data.attachmentName.size() >= 1
+               )
+             );
+    }
+
     // --- 1. Private User Profiles ---
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -277,6 +335,18 @@ service cloud.firestore {
                        );
 
       allow delete: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+
+      match /fcm_tokens/{tokenId} {
+        allow read, delete: if isSignedIn() && request.auth.uid == userId && tokenId.size() >= 1 && tokenId.size() <= 256;
+        allow create, update: if isSignedIn() &&
+                                 request.auth.uid == userId &&
+                                 tokenId.size() >= 1 && tokenId.size() <= 256 &&
+                                 incoming().token is string &&
+                                 incoming().token.size() >= 10 &&
+                                 incoming().token.size() <= 512 &&
+                                 incoming().platform in ['android', 'web'] &&
+                                 isValidTimestamp(incoming().updatedAt);
+      }
     }
 
     // --- 2. Service Categories & Subcategories (Public Read, Admin Write) ---
@@ -757,6 +827,118 @@ service cloud.firestore {
                        );
 
       allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // --- 11. In-App Help & Support Conversations (Owner & Verified Admin Only) ---
+    match /support_conversations/{conversationId} {
+      allow get: if isSignedIn() && isValidId(conversationId) &&
+                    (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isBootstrappedAdmin() ||
+                     (isSignedIn() && existing().userId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(conversationId) &&
+                       conversationId.matches('^sc_' + request.auth.uid + '--[a-zA-Z0-9_-]+$') &&
+                       isValidSupportConversation(incoming()) &&
+                       incoming().conversationId == conversationId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'Open' &&
+                       incoming().assignedAdminId == '' &&
+                       incoming().unreadCountUser == 0 &&
+                       incoming().unreadCountAdmin >= 0 &&
+                       incoming().unreadCountAdmin <= 1 &&
+                       incoming().keys().hasAll([
+                         'conversationId', 'userId', 'userName', 'userEmail', 'accountType',
+                         'issueCategory', 'subject', 'status', 'assignedAdminId', 'lastMessage',
+                         'lastMessageAt', 'unreadCountUser', 'unreadCountAdmin', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'conversationId', 'userId', 'userName', 'userEmail', 'accountType',
+                         'issueCategory', 'subject', 'status', 'assignedAdminId', 'lastMessage',
+                         'lastMessageAt', 'unreadCountUser', 'unreadCountAdmin', 'createdAt', 'updatedAt'
+                       ]);
+
+      allow update: if isSignedIn() &&
+                       isValidId(conversationId) &&
+                       isValidSupportConversation(incoming()) &&
+                       incoming().conversationId == existing().conversationId &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         (
+                           request.auth.uid == existing().userId &&
+                           incoming().assignedAdminId == existing().assignedAdminId &&
+                           incoming().issueCategory == existing().issueCategory &&
+                           incoming().accountType == existing().accountType &&
+                           incoming().subject == existing().subject &&
+                           (incoming().unreadCountUser == 0 || incoming().unreadCountUser == existing().unreadCountUser) &&
+                           (incoming().unreadCountAdmin == existing().unreadCountAdmin || incoming().unreadCountAdmin == existing().unreadCountAdmin + 1) &&
+                           (
+                             incoming().status == existing().status ||
+                             (existing().status in ['Pending', 'Resolved'] && incoming().status == 'Open')
+                           ) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'lastMessage', 'lastMessageAt', 'unreadCountAdmin', 'unreadCountUser', 'status', 'updatedAt'
+                           ])
+                         ) ||
+                         (
+                           isAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'status', 'assignedAdminId', 'lastMessage', 'lastMessageAt',
+                             'unreadCountUser', 'unreadCountAdmin', 'updatedAt'
+                           ])
+                         )
+                       );
+
+      allow delete: if false;
+    }
+
+    // --- 12. In-App Help & Support Messages (Chronological Stream, Anti-Spoofing) ---
+    match /support_messages/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId) &&
+                    (existing().conversationOwnerId == request.auth.uid || isAdmin());
+      allow list: if isBootstrappedAdmin() ||
+                     (isSignedIn() && existing().conversationOwnerId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(messageId) &&
+                       isValidSupportMessage(incoming()) &&
+                       incoming().messageId == messageId &&
+                       incoming().senderId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'messageId', 'conversationId', 'conversationOwnerId', 'senderId', 'senderName',
+                         'senderRole', 'messageType', 'text', 'attachmentUrl', 'attachmentPath',
+                         'attachmentName', 'attachmentType', 'duration', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'messageId', 'conversationId', 'conversationOwnerId', 'senderId', 'senderName',
+                         'senderRole', 'messageType', 'text', 'attachmentUrl', 'attachmentPath',
+                         'attachmentName', 'attachmentType', 'duration', 'createdAt', 'readAt'
+                       ]) &&
+                       existsAfter(/databases/$(database)/documents/support_conversations/$(incoming().conversationId)) &&
+                       getAfter(/databases/$(database)/documents/support_conversations/$(incoming().conversationId)).data.userId == incoming().conversationOwnerId &&
+                       (
+                         (
+                           incoming().senderRole == 'User' &&
+                           incoming().conversationOwnerId == request.auth.uid &&
+                           !('readAt' in incoming())
+                         ) ||
+                         (
+                           isAdmin() &&
+                           incoming().senderRole == 'Admin'
+                         )
+                       );
+
+      allow update: if isSignedIn() &&
+                       isValidId(messageId) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['readAt']) &&
+                       !('readAt' in existing()) &&
+                       isValidTimestamp(incoming().readAt) &&
+                       (
+                         (request.auth.uid == existing().conversationOwnerId && existing().senderRole == 'Admin') ||
+                         (isAdmin() && existing().senderRole == 'User')
+                       );
+
+      allow delete: if false;
     }
   }
 }

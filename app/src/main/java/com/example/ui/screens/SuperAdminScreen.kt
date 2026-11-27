@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.LaptopMac
 import androidx.compose.material.icons.rounded.ReportProblem
+import androidx.compose.material.icons.rounded.SupportAgent
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.AlertDialog
@@ -78,6 +79,10 @@ import com.example.model.ServiceCategories
 import com.example.model.ServiceCategory
 import com.example.model.ServiceCategoryEntity
 import com.example.model.ServiceComplaint
+import com.example.model.SupportConversation
+import com.example.model.SupportConversationStatus
+import com.example.model.SupportMessage
+import com.example.model.SupportMessageType
 import com.example.model.TechnicianProfile
 import com.example.model.UiState
 import com.example.model.UserProfile
@@ -89,6 +94,7 @@ import com.example.ui.theme.OnEmeraldContainer
 
 private enum class AdminSection(val label: String, val icon: ImageVector) {
   VERIFICATIONS("Verifications", Icons.Rounded.VerifiedUser),
+  SUPPORT_INBOX("Support Inbox", Icons.Rounded.SupportAgent),
   CATEGORIES("Categories", Icons.Rounded.Category),
   USERS("Users", Icons.Rounded.Group),
   BOOKINGS("Bookings", Icons.Rounded.CalendarMonth),
@@ -125,6 +131,22 @@ fun SuperAdminScreen(
   ) -> Unit,
   onUpdateUser: (userId: String, suspended: Boolean, role: String) -> Unit,
   onResolveComplaint: (complaintId: String, status: ComplaintStatus, resolution: String) -> Unit,
+  supportConversationsState: UiState<List<SupportConversation>> = UiState.Success(emptyList()),
+  activeSupportConversation: SupportConversation? = null,
+  supportMessagesState: UiState<List<SupportMessage>> = UiState.Success(emptyList()),
+  supportUnreadCount: Int = 0,
+  currentAdminEmail: String = "",
+  onSelectSupportConversation: (String?) -> Unit = {},
+  onSendSupportAdminReply: (
+    SupportConversation,
+    String,
+    SupportMessageType,
+    ByteArray?,
+    String,
+    String,
+  ) -> Unit = { _, _, _, _, _, _ -> },
+  onUpdateSupportStatus: (String, SupportConversationStatus, String) -> Unit = { _, _, _ -> },
+  onMarkSupportReadAdmin: (SupportConversation, List<SupportMessage>) -> Unit = { _, _ -> },
   modifier: Modifier = Modifier,
 ) {
   var activeSection by remember { mutableStateOf(AdminSection.VERIFICATIONS) }
@@ -176,6 +198,7 @@ fun SuperAdminScreen(
             val badgeCount =
               when (section) {
                 AdminSection.VERIFICATIONS -> pendingCount
+                AdminSection.SUPPORT_INBOX -> supportUnreadCount
                 AdminSection.COMPLAINTS -> openReportsCount
                 else -> 0
               }
@@ -212,6 +235,14 @@ fun SuperAdminScreen(
             onSaveCategory = onSaveCategory,
             onUpdateUser = onUpdateUser,
             onResolveComplaint = onResolveComplaint,
+            supportConversationsState = supportConversationsState,
+            activeSupportConversation = activeSupportConversation,
+            supportMessagesState = supportMessagesState,
+            currentAdminEmail = currentAdminEmail,
+            onSelectSupportConversation = onSelectSupportConversation,
+            onSendSupportAdminReply = onSendSupportAdminReply,
+            onUpdateSupportStatus = onUpdateSupportStatus,
+            onMarkSupportReadAdmin = onMarkSupportReadAdmin,
           )
         }
       }
@@ -261,6 +292,7 @@ fun SuperAdminScreen(
               val badgeCount =
                 when (section) {
                   AdminSection.VERIFICATIONS -> pendingCount
+                  AdminSection.SUPPORT_INBOX -> supportUnreadCount
                   AdminSection.COMPLAINTS -> openReportsCount
                   else -> 0
                 }
@@ -295,6 +327,14 @@ fun SuperAdminScreen(
             onSaveCategory = onSaveCategory,
             onUpdateUser = onUpdateUser,
             onResolveComplaint = onResolveComplaint,
+            supportConversationsState = supportConversationsState,
+            activeSupportConversation = activeSupportConversation,
+            supportMessagesState = supportMessagesState,
+            currentAdminEmail = currentAdminEmail,
+            onSelectSupportConversation = onSelectSupportConversation,
+            onSendSupportAdminReply = onSendSupportAdminReply,
+            onUpdateSupportStatus = onUpdateSupportStatus,
+            onMarkSupportReadAdmin = onMarkSupportReadAdmin,
           )
         }
       }
@@ -319,6 +359,21 @@ private fun AdminSectionWorkspace(
   onSaveCategory: (String, String, String, String, List<String>, Boolean, Long) -> Unit,
   onUpdateUser: (String, Boolean, String) -> Unit,
   onResolveComplaint: (String, ComplaintStatus, String) -> Unit,
+  supportConversationsState: UiState<List<SupportConversation>>,
+  activeSupportConversation: SupportConversation?,
+  supportMessagesState: UiState<List<SupportMessage>>,
+  currentAdminEmail: String,
+  onSelectSupportConversation: (String?) -> Unit,
+  onSendSupportAdminReply: (
+    SupportConversation,
+    String,
+    SupportMessageType,
+    ByteArray?,
+    String,
+    String,
+  ) -> Unit,
+  onUpdateSupportStatus: (String, SupportConversationStatus, String) -> Unit,
+  onMarkSupportReadAdmin: (SupportConversation, List<SupportMessage>) -> Unit,
 ) {
   when (activeSection) {
     AdminSection.VERIFICATIONS ->
@@ -329,6 +384,18 @@ private fun AdminSectionWorkspace(
         isBusy = isBusy,
         onInspectVerificationDoc = onInspectVerificationDoc,
         onReviewTechnician = onReviewTechnician,
+      )
+    AdminSection.SUPPORT_INBOX ->
+      AdminSupportInboxPane(
+        conversationsState = supportConversationsState,
+        activeConversation = activeSupportConversation,
+        messagesState = supportMessagesState,
+        currentAdminEmail = currentAdminEmail,
+        isBusy = isBusy,
+        onSelectConversation = onSelectSupportConversation,
+        onSendAdminReply = onSendSupportAdminReply,
+        onUpdateStatusAndAssignee = onUpdateSupportStatus,
+        onMarkConversationRead = onMarkSupportReadAdmin,
       )
     AdminSection.CATEGORIES ->
       AdminCategoriesPane(

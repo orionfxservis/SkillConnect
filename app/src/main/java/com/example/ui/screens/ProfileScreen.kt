@@ -108,12 +108,13 @@ fun ProfileScreen(
   onToggleSavedTechnician: (String) -> Unit,
   onOpenProHub: () -> Unit,
   onOpenSuperAdmin: () -> Unit,
+  onOpenSupport: () -> Unit = {},
+  supportUnreadCount: Int = 0,
   onSignOut: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   var showSavedSheet by remember { mutableStateOf(false) }
   var showSettingsSheet by remember { mutableStateOf(false) }
-  var showHelpSheet by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
   val authCardBringIntoView = remember { BringIntoViewRequester() }
   val profile = (userProfileState as? UiState.Success)?.data
@@ -338,8 +339,9 @@ fun ProfileScreen(
           AccountMenuRow(
             icon = Icons.AutoMirrored.Rounded.HelpOutline,
             title = "Help & Support",
-            subtitle = "Zero payment gate, direct pay & rating accountability FAQ",
-            onClick = { showHelpSheet = true },
+            subtitle = "Send us a message, voice note, screenshot or PDF",
+            badgeCount = supportUnreadCount,
+            onClick = onOpenSupport,
             modifier = Modifier.testTag("menu_help_support"),
           )
         }
@@ -395,10 +397,6 @@ fun ProfileScreen(
       onRequestLocation = onRequestLocation,
       onDismiss = { showSettingsSheet = false },
     )
-  }
-
-  if (showHelpSheet) {
-    HelpAndSupportSheet(onDismiss = { showHelpSheet = false })
   }
 }
 
@@ -667,6 +665,7 @@ private fun AccountMenuRow(
   icon: ImageVector,
   title: String,
   subtitle: String,
+  badgeCount: Int = 0,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -699,6 +698,21 @@ private fun AccountMenuRow(
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
+    }
+    if (badgeCount > 0) {
+      Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(end = 6.dp),
+      ) {
+        Text(
+          text = if (badgeCount > 99) "99+" else badgeCount.toString(),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onPrimary,
+          fontWeight = FontWeight.Bold,
+          modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+        )
+      }
     }
     Icon(
       imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
