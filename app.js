@@ -2168,15 +2168,18 @@ function renderAdminPane() {
 
 function renderAdminOverview(root) {
   const techs = getTechnicians();
+  const activeAccounts = techs.filter((t) => t.verificationStatus === 'APPROVED' && t.listed !== false);
   const pendingAccounts = techs.filter((t) => t.verificationStatus === 'PENDING');
   const subs = getSubscriptions();
   const renewalQueue = subs.filter((s) => s.renewalStatus === 'RENEWAL_PENDING' || s.renewalStatus === 'EXPIRED');
   const payments = getPayments();
+  const approvedPayments = payments.filter((p) => p.status === 'APPROVED');
   const pendingPayments = payments.filter((p) => p.status === 'PENDING');
-  const approvedRevenue = payments
-    .filter((p) => p.status === 'APPROVED')
-    .reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
+  const approvedRevenue = approvedPayments.reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
+  const pendingDueAmount = pendingPayments.reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
   const banners = getBanners();
+  const totalHomeBanners = banners.filter((b) => b.placement === 'HOME').length;
+  const totalCatBanners = banners.filter((b) => b.placement === 'CATEGORY').length;
   const homeCount = banners.filter((b) => b.placement === 'HOME' && b.active).length;
   const catCount = banners.filter((b) => b.placement === 'CATEGORY' && b.active).length;
 
@@ -2192,24 +2195,39 @@ function renderAdminOverview(root) {
       </div>
     </div>
 
-    <div class="kpi-grid">
-      <div class="kpi-card">
+    <div class="kpi-grid kpi-grid-corp">
+      <div class="kpi-card kpi-corp-emerald">
+        <span class="kpi-label">Active Accounts</span>
+        <span class="kpi-value">${activeAccounts.length}</span>
+        <span class="kpi-sub">${techs.length} Total Skill Persons</span>
+      </div>
+      <div class="kpi-card kpi-corp-amber">
         <span class="kpi-label">New Accounts Pending</span>
         <span class="kpi-value">${pendingAccounts.length}</span>
         <span class="kpi-sub">${techs.filter((t) => t.verificationStatus === 'APPROVED').length} Approved Skill Persons</span>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card kpi-corp-blue">
         <span class="kpi-label">Old Renewals Due / Pending</span>
         <span class="kpi-value">${renewalQueue.length}</span>
         <span class="kpi-sub">${subs.filter((s) => s.renewalStatus === 'ACTIVE').length} Active Pro Renewals</span>
       </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Skill Person Payments</span>
+      <div class="kpi-card kpi-corp-teal">
+        <span class="kpi-label">Payment Received</span>
         <span class="kpi-value">${fmtRs(approvedRevenue)}</span>
+        <span class="kpi-sub">${approvedPayments.length} Approved Receipts</span>
+      </div>
+      <div class="kpi-card kpi-corp-rose">
+        <span class="kpi-label">Payment Due</span>
+        <span class="kpi-value">${fmtRs(pendingDueAmount)}</span>
         <span class="kpi-sub">${pendingPayments.length} Pending Verification</span>
       </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Active App Banners</span>
+      <div class="kpi-card kpi-corp-indigo">
+        <span class="kpi-label">Total Banners</span>
+        <span class="kpi-value">${banners.length}</span>
+        <span class="kpi-sub">${totalHomeBanners} Home &bull; ${totalCatBanners} Category</span>
+      </div>
+      <div class="kpi-card kpi-corp-mint">
+        <span class="kpi-label">Active Banners</span>
         <span class="kpi-value">${homeCount + catCount}</span>
         <span class="kpi-sub">${homeCount} Home &bull; ${catCount} Category Slides</span>
       </div>
