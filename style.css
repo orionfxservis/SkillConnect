@@ -2530,9 +2530,9 @@ select {
     align-items: stretch;
   }
 
-  /* Left side: Current Mobile App Preview scaled to fit inside window */
+  /* Right side: Current Mobile App Preview scaled to fit inside window */
   .mobile-showcase-pane {
-    order: 1;
+    order: 2;
     width: 318px;
     height: 100%;
     min-height: 0;
@@ -2750,9 +2750,9 @@ select {
     height: 17px;
   }
 
-  /* Right side: Laptop Admin Console locked cleanly to window height */
+  /* Left side: Laptop Admin Console locked cleanly to window height */
   .admin-console-shell {
-    order: 2;
+    order: 1;
     flex: 1;
     min-width: 0;
     height: 100%;
@@ -2812,6 +2812,10 @@ select {
   .admin-main-pane .kpi-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .admin-main-pane .kpi-grid.kpi-grid-corp {
+    width: 90%;
   }
 
   .admin-main-pane .kpi-card {
