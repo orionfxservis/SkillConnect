@@ -2293,6 +2293,20 @@ function renderAdminPane() {
 }
 
 function renderAdminOverview(root) {
+  const techs = getTechnicians();
+  const activeAccounts = techs.filter((t) => t.verificationStatus === 'APPROVED');
+  const pendingAccounts = techs.filter((t) => t.verificationStatus === 'PENDING');
+  const subs = getSubscriptions();
+  const renewalQueue = subs.filter((s) => s.renewalStatus === 'RENEWAL_PENDING' || s.renewalStatus === 'EXPIRED');
+  const activeRenewals = subs.filter((s) => s.renewalStatus === 'ACTIVE');
+  const payments = getPayments();
+  const approvedPayments = payments.filter((p) => p.status === 'APPROVED');
+  const pendingPayments = payments.filter((p) => p.status === 'PENDING');
+  const paymentReceivedSum = approvedPayments.reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
+  const paymentDueSum = pendingPayments.reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
+  const banners = getBanners();
+  const activeBanners = banners.filter((b) => b.active);
+
   root.innerHTML = `
     <div class="pane-header">
       <div>
@@ -2303,6 +2317,124 @@ function renderAdminOverview(root) {
         <button type="button" class="btn btn-primary" data-jump-section="banners" data-open-banner-add="1">+ Add Banner</button>
         <button type="button" class="btn btn-outline" data-jump-section="payments" data-open-pay-add="1">+ Record Payment</button>
         <button type="button" class="btn btn-outline" data-jump-section="accounts_ledger">Open Accounts</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid kpi-grid-corp">
+      <div class="kpi-card kpi-corp-emerald">
+        <span class="kpi-label">Active Accounts</span>
+        <span class="kpi-value">${activeAccounts.length}</span>
+        <span class="kpi-sub">${techs.length} Registered Skill Persons</span>
+      </div>
+      <div class="kpi-card kpi-corp-amber">
+        <span class="kpi-label">New Accounts Pending</span>
+        <span class="kpi-value">${pendingAccounts.length}</span>
+        <span class="kpi-sub">Awaiting CNIC &amp; Trade Review</span>
+      </div>
+      <div class="kpi-card kpi-corp-blue">
+        <span class="kpi-label">Old Renewals Due / Pending</span>
+        <span class="kpi-value">${renewalQueue.length}</span>
+        <span class="kpi-sub">${activeRenewals.length} Active Pro Renewals</span>
+      </div>
+      <div class="kpi-card kpi-corp-teal">
+        <span class="kpi-label">Payment Received</span>
+        <span class="kpi-value">${fmtRs(paymentReceivedSum)}</span>
+        <span class="kpi-sub">${approvedPayments.length} Approved Receipts</span>
+      </div>
+      <div class="kpi-card kpi-corp-rose">
+        <span class="kpi-label">Payment Due</span>
+        <span class="kpi-value">${fmtRs(paymentDueSum)}</span>
+        <span class="kpi-sub">${pendingPayments.length} Pending Verification</span>
+      </div>
+      <div class="kpi-card kpi-corp-indigo">
+        <span class="kpi-label">Total Banners</span>
+        <span class="kpi-value">${banners.length}</span>
+        <span class="kpi-sub">${banners.filter((b) => b.placement === 'HOME').length} Home &bull; ${banners.filter((b) => b.placement === 'CATEGORY').length} Category Slides</span>
+      </div>
+      <div class="kpi-card kpi-corp-mint">
+        <span class="kpi-label">Active Banners</span>
+        <span class="kpi-value">${activeBanners.length}</span>
+        <span class="kpi-sub">${activeBanners.filter((b) => b.placement === 'HOME').length} Home &bull; ${activeBanners.filter((b) => b.placement === 'CATEGORY').length} Category Active</span>
+      </div>
+    </div>
+
+    <div class="admin-card-grid">
+      <div class="admin-card">
+        <div class="info-card-top">
+          <strong>Pending New Accounts (${pendingAccounts.length})</strong>
+          <button type="button" class="btn btn-outline btn-sm" data-jump-section="accounts">Open All</button>
+        </div>
+        ${
+          pendingAccounts.length
+            ? pendingAccounts
+                .slice(0, 4)
+                .map(
+                  (t) => `
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                    <div>
+                      <div style="font-weight:700;font-size:13px;">${esc(t.fullName)}</div>
+                      <div style="font-size:11.5px;color:#64748b;">${esc(categoryMeta(t.categoryId).name)} &bull; ${esc(t.workingArea)}</div>
+                    </div>
+                    <div class="table-actions">
+                      <button type="button" class="btn btn-outline btn-sm" data-inspect-tech="${esc(t.userId || t.id)}">Inspect</button>
+                      <button type="button" class="btn btn-success btn-sm" data-quick-approve-tech="${esc(t.userId || t.id)}">Approve</button>
+                    </div>
+                  </div>`
+                )
+                .join('')
+            : '<p style="font-size:12.5px;color:#64748b;margin:4px 0;">All new Skill Person applications are reviewed.</p>'
+        }
+      </div>
+
+      <div class="admin-card">
+        <div class="info-card-top">
+          <strong>After Renew Old — Approve Queue (${renewalQueue.length})</strong>
+          <button type="button" class="btn btn-outline btn-sm" data-jump-section="renewals">Manage Renewals</button>
+        </div>
+        ${
+          renewalQueue.length
+            ? renewalQueue
+                .slice(0, 4)
+                .map(
+                  (s) => `
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                    <div>
+                      <div style="font-weight:700;font-size:13px;">${esc(s.providerName)}</div>
+                      <div style="font-size:11.5px;color:#64748b;">
+                        <span class="badge ${statusBadgeClass(s.renewalStatus)}">${esc(s.renewalStatus)}</span>
+                        &bull; ${fmtRs(s.lastPaymentAmount || 499)}
+                      </div>
+                    </div>
+                    <button type="button" class="btn btn-success btn-sm" data-quick-approve-renewal="${esc(s.userId || s.id)}">Approve Renewal</button>
+                  </div>`
+                )
+                .join('')
+            : '<p style="font-size:12.5px;color:#64748b;margin:4px 0;">No pending or expired renewals.</p>'
+        }
+      </div>
+
+      <div class="admin-card">
+        <div class="info-card-top">
+          <strong>Pending Skill Person Payments (${pendingPayments.length})</strong>
+          <button type="button" class="btn btn-outline btn-sm" data-jump-section="payments">All Payments</button>
+        </div>
+        ${
+          pendingPayments.length
+            ? pendingPayments
+                .slice(0, 4)
+                .map(
+                  (p) => `
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
+                    <div>
+                      <div style="font-weight:700;font-size:13px;">${esc(p.providerName)} &bull; ${fmtRs(p.amountPkr)}</div>
+                      <div style="font-size:11.5px;color:#64748b;">${esc(p.paymentMethod)} (${esc(p.transactionRef)})</div>
+                    </div>
+                    <button type="button" class="btn btn-success btn-sm" data-approve-payment="${esc(p.paymentId || p.id)}">Approve</button>
+                  </div>`
+                )
+                .join('')
+            : '<p style="font-size:12.5px;color:#64748b;margin:4px 0;">All payments verified.</p>'
+        }
       </div>
     </div>
   `;
