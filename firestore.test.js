@@ -744,9 +744,139 @@ test("In-App Help & Support isolates user tickets, blocks senderRole/assignedAdm
   });
   await assertSucceeds(readBatch.commit());
 
+  // Non-existent message/conversation get check does not crash rules; existing doc still blocked for other users
+  await assertSucceeds(clientDb.collection("support_messages").doc("msg_non_existent_retry_check").get());
+  await assertFails(otherDb.collection("support_messages").doc(adminReplyId).get());
+
+  // Alice sends a 2nd follow-up text message while ticket status is Pending (both keeping Pending and reopening Open must succeed)
+  const msg2Id = "msg_1700000004_u2";
+  const followUpBatch = clientDb.batch();
+  followUpBatch.set(clientDb.collection("support_messages").doc(msg2Id), {
+    messageId: msg2Id,
+    conversationId: convId,
+    conversationOwnerId: CLIENT_UID,
+    senderId: CLIENT_UID,
+    senderName: "Alice",
+    senderRole: "User",
+    messageType: "text",
+    text: "Maybe it is happening on update?",
+    attachmentUrl: "",
+    attachmentPath: "",
+    attachmentName: "",
+    attachmentType: "",
+    duration: 0,
+    createdAt: pastDate(300),
+  });
+  followUpBatch.update(clientDb.collection("support_conversations").doc(convId), {
+    status: "Pending",
+    lastMessage: "Maybe it is happening on update?",
+    lastMessageAt: pastDate(300),
+    unreadCountAdmin: 1,
+    unreadCountUser: 0,
+    updatedAt: pastDate(300),
+  });
+  await assertSucceeds(followUpBatch.commit());
+
+  // Alice sends a 3rd message as a Voice note in the same Pending conversation
+  const msgVoiceId = "msg_1700000005_voice";
+  const voiceBatch = clientDb.batch();
+  voiceBatch.set(clientDb.collection("support_messages").doc(msgVoiceId), {
+    messageId: msgVoiceId,
+    conversationId: convId,
+    conversationOwnerId: CLIENT_UID,
+    senderId: CLIENT_UID,
+    senderName: "Alice",
+    senderRole: "User",
+    messageType: "voice",
+    text: "",
+    attachmentUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/voice_1.m4a",
+    attachmentPath: `support-attachments/${convId}/1700000005_voice.m4a`,
+    attachmentName: "voice_1.m4a",
+    attachmentType: "audio/mp4",
+    duration: 6,
+    createdAt: pastDate(200),
+  });
+  voiceBatch.update(clientDb.collection("support_conversations").doc(convId), {
+    status: "Pending",
+    lastMessage: "Voice message (6s)",
+    lastMessageAt: pastDate(200),
+    unreadCountAdmin: 2,
+    unreadCountUser: 0,
+    updatedAt: pastDate(200),
+  });
+  await assertSucceeds(voiceBatch.commit());
+
   // Nobody can delete support messages or conversations
   await assertFails(clientDb.collection("support_messages").doc(msg1Id).delete());
   await assertFails(customClaimAdminDb.collection("support_conversations").doc(convId).delete());
+});
+
+test("Admin manages Accounts expense heads and monthly expenses while non-admins are blocked", async () => {
+  const clientDb = testEnv.authenticatedContext(CLIENT_UID).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID, {
+    email: "admin-skillconnect@orionfx.net",
+    email_verified: true,
+  }).firestore();
+  const ts = pastDate(2000);
+
+  await assertFails(
+    clientDb.collection("expense_heads").doc("head_office").set({
+      headId: "head_office",
+      name: "Office Rent",
+      description: "Monthly co-working desk",
+      active: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("expense_heads").doc("head_office").set({
+      headId: "head_office",
+      name: "Office Rent",
+      description: "Monthly co-working desk",
+      active: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertFails(clientDb.collection("expense_heads").get());
+  await assertSucceeds(adminDb.collection("expense_heads").get());
+
+  await assertFails(
+    clientDb.collection("expenses").doc("exp_1").set({
+      expenseId: "exp_1",
+      headId: "head_office",
+      headName: "Office Rent",
+      title: "November Desk Rent",
+      notes: "Paid via Bank Transfer",
+      amountPkr: 15000,
+      monthKey: "2026-11",
+      expenseDate: "2026-11-05",
+      paymentMethod: "Bank Transfer",
+      createdBy: "admin-skillconnect@orionfx.net",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("expenses").doc("exp_1").set({
+      expenseId: "exp_1",
+      headId: "head_office",
+      headName: "Office Rent",
+      title: "November Desk Rent",
+      notes: "Paid via Bank Transfer",
+      amountPkr: 15000,
+      monthKey: "2026-11",
+      expenseDate: "2026-11-05",
+      paymentMethod: "Bank Transfer",
+      createdBy: "admin-skillconnect@orionfx.net",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(adminDb.collection("expenses").get());
+  await assertFails(clientDb.collection("expenses").get());
+  await assertSucceeds(adminDb.collection("expenses").doc("exp_1").delete());
 });
 
 

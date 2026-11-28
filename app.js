@@ -35,7 +35,11 @@ import {
   createSupportConversationWeb,
   sendSupportMessageWeb,
   markSupportReadWeb,
-  updateSupportConversationAdminWeb
+  updateSupportConversationAdminWeb,
+  saveExpenseHeadWeb,
+  deleteExpenseHeadWeb,
+  saveExpenseWeb,
+  deleteExpenseWeb
 } from './firebase-admin.js';
 
 const STORAGE_KEY = 'skillconnect_web_admin_v3';
@@ -594,6 +598,25 @@ function makeInitialSeedData() {
         isRenewal: true,
         adminRemarks: 'Verified in bank statement',
         createdAtMillis: now - 6 * DAY_MS
+      },
+      {
+        id: 'pay_pro_099',
+        paymentId: 'pay_pro_099',
+        userId: 'tech_ali_raza',
+        providerName: 'Ali Raza',
+        providerPhone: '+92 300 4128901',
+        categoryName: 'Solar & Electrical',
+        planType: 'PRO_RENEWAL',
+        amountPkr: 998,
+        paymentMethod: 'JazzCash',
+        transactionRef: 'JC-77120411',
+        billingPeriodMonths: 2,
+        receiptNote: 'Previous month 2-month Pro package verified',
+        receiptImageData: '',
+        status: 'APPROVED',
+        isRenewal: true,
+        adminRemarks: 'Verified last month',
+        createdAtMillis: now - 33 * DAY_MS
       }
     ],
     bookings: [
@@ -639,6 +662,38 @@ function makeInitialSeedData() {
       { id: 'n1', title: 'New Account Pending', body: 'Kamran Siddiqui (Electrician) uploaded CNIC for approval.', time: 'Just now' },
       { id: 'n2', title: 'Old Account Renewal Submitted', body: 'Ali Raza paid Rs. 499 via JazzCash (JC-88921044) for renewal approval.', time: '3h ago' },
       { id: 'n3', title: 'Category Banners Synced', body: '5 promotional slides active at bottom of every category page.', time: 'Today' }
+    ],
+    expenseHeads: [
+      { headId: 'head_office', name: 'Office & Workspace', description: 'Co-working, stationery & desk expenses', active: true },
+      { headId: 'head_marketing', name: 'Marketing & Ads', description: 'Social media promotions & print flyers', active: true },
+      { headId: 'head_cloud', name: 'Server & Cloud Tools', description: 'Domain, hosting & software subscriptions', active: true },
+      { headId: 'head_utilities', name: 'Internet & Utilities', description: 'Broadband internet & office electricity', active: true },
+      { headId: 'head_staff', name: 'Staff & Support', description: 'Operations & verification staff payouts', active: true },
+      { headId: 'head_misc', name: 'Miscellaneous', description: 'Other operational expenses', active: true }
+    ],
+    expenses: [
+      {
+        expenseId: 'exp_seed_curr_1',
+        headId: 'head_cloud',
+        headName: 'Server & Cloud Tools',
+        title: 'Domain & Portal Hosting Renewal',
+        notes: 'Monthly infrastructure upkeep',
+        amountPkr: 150,
+        monthKey: toMonthKey(now),
+        expenseDate: new Date(now - 2 * DAY_MS).toISOString().slice(0, 10),
+        paymentMethod: 'Bank Transfer'
+      },
+      {
+        expenseId: 'exp_seed_last_1',
+        headId: 'head_marketing',
+        headName: 'Marketing & Ads',
+        title: 'Local Technician Onboarding Flyers',
+        notes: 'Karachi market outreach campaign',
+        amountPkr: 350,
+        monthKey: toMonthKey(now - 33 * DAY_MS),
+        expenseDate: new Date(now - 33 * DAY_MS).toISOString().slice(0, 10),
+        paymentMethod: 'Cash'
+      }
     ]
   };
 }
@@ -658,7 +713,9 @@ function loadLocalData() {
       payments: Array.isArray(parsed.payments) ? parsed.payments : fallback.payments,
       bookings: Array.isArray(parsed.bookings) ? parsed.bookings : fallback.bookings,
       complaints: Array.isArray(parsed.complaints) ? parsed.complaints : fallback.complaints,
-      notifications: Array.isArray(parsed.notifications) ? parsed.notifications : fallback.notifications
+      notifications: Array.isArray(parsed.notifications) ? parsed.notifications : fallback.notifications,
+      expenseHeads: Array.isArray(parsed.expenseHeads) && parsed.expenseHeads.length ? parsed.expenseHeads : fallback.expenseHeads,
+      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : fallback.expenses
     };
   } catch {
     return makeInitialSeedData();
@@ -683,6 +740,10 @@ const state = {
   paymentStatusFilter: 'ALL', // ALL | PENDING | APPROVED | REJECTED | REFUNDED
   paymentMethodFilter: 'ALL',
   paymentSearch: '',
+  accountsPeriod: 'CURRENT_MONTH', // CURRENT_MONTH | LAST_MONTH | CUSTOM_MONTH | ALL_TIME
+  accountsSelectedMonth: toMonthKey(Date.now()),
+  accountsTab: 'SUMMARY', // SUMMARY | INCOME | EXPENSES | HEADS
+  accountsHeadFilter: 'ALL',
 
   data: loadLocalData(),
   liveCollections: {
@@ -694,7 +755,9 @@ const state = {
     payments: null,
     bookings: null,
     complaints: null,
-    supportConversations: null
+    supportConversations: null,
+    expenseHeads: null,
+    expenses: null
   },
 
   /* Support Chat & Admin Support Inbox State */
@@ -822,6 +885,25 @@ function getUserSupportConversations() {
   );
 }
 
+function getExpenseHeads() {
+  const list = state.liveCollections.expenseHeads !== null
+    ? state.liveCollections.expenseHeads
+    : (state.data.expenseHeads || []);
+  return [...list].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+
+function getExpenses() {
+  const list = state.liveCollections.expenses !== null
+    ? state.liveCollections.expenses
+    : (state.data.expenses || []);
+  return [...list].sort((a, b) => {
+    const da = String(a.expenseDate || '');
+    const db = String(b.expenseDate || '');
+    if (db !== da) return db.localeCompare(da);
+    return getMillis(b.createdAt || b.updatedAt) - getMillis(a.createdAt || a.updatedAt);
+  });
+}
+
 /* ==================== UTILITIES ==================== */
 function esc(val) {
   return String(val ?? '')
@@ -840,7 +922,38 @@ function getMillis(ts) {
   return 0;
 }
 
+function toMonthKey(val) {
+  if (typeof val === 'string' && /^\d{4}-\d{2}/.test(val.trim())) {
+    return val.trim().slice(0, 7);
+  }
+  const ms = getMillis(val) || (val instanceof Date ? val.getTime() : 0);
+  if (!ms) return '';
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getCurrentMonthKey() {
+  return toMonthKey(Date.now());
+}
+
+function getLastMonthKey() {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function fmtMonthLabel(monthKey) {
+  if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) return 'All Months';
+  const [y, m] = monthKey.split('-').map((n) => parseInt(n, 10));
+  return new Date(y, m - 1, 1).toLocaleDateString('en-PK', { month: 'short', year: 'numeric' });
+}
+
 function fmtDate(ms) {
+  if (typeof ms === 'string' && /^\d{4}-\d{2}-\d{2}/.test(ms)) {
+    const [y, m, d] = ms.slice(0, 10).split('-').map((n) => parseInt(n, 10));
+    return new Date(y, m - 1, d).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
   const n = getMillis(ms);
   if (!n) return '—';
   return new Date(n).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -1088,6 +1201,16 @@ function startAdminListeners() {
       }
       renderAll();
     },
+    onExpenseHeads: (docs) => {
+      markSynced('expense_heads');
+      state.liveCollections.expenseHeads = docs;
+      renderAll();
+    },
+    onExpenses: (docs) => {
+      markSynced('expenses');
+      state.liveCollections.expenses = docs;
+      renderAll();
+    },
     onError: (col, err) => {
       syncErrors.add(col);
       const list = Array.from(syncErrors).map((c) => `<strong>${esc(c)}</strong>`).join(', ');
@@ -1158,7 +1281,9 @@ function initFirebaseAuth() {
         payments: null,
         bookings: null,
         complaints: null,
-        supportConversations: null
+        supportConversations: null,
+        expenseHeads: null,
+        expenses: null
       };
       startPublicListeners();
       if (user) {
@@ -2161,28 +2286,13 @@ function renderAdminPane() {
   if (state.adminSection === 'renewals') return renderAdminRenewals(root);
   if (state.adminSection === 'banners') return renderAdminBanners(root);
   if (state.adminSection === 'payments') return renderAdminPayments(root);
+  if (state.adminSection === 'accounts_ledger') return renderAdminAccountsLedger(root);
   if (state.adminSection === 'categories') return renderAdminCategories(root);
   if (state.adminSection === 'support_inbox') return renderAdminSupportInbox(root);
   return renderAdminOperations(root);
 }
 
 function renderAdminOverview(root) {
-  const techs = getTechnicians();
-  const activeAccounts = techs.filter((t) => t.verificationStatus === 'APPROVED' && t.listed !== false);
-  const pendingAccounts = techs.filter((t) => t.verificationStatus === 'PENDING');
-  const subs = getSubscriptions();
-  const renewalQueue = subs.filter((s) => s.renewalStatus === 'RENEWAL_PENDING' || s.renewalStatus === 'EXPIRED');
-  const payments = getPayments();
-  const approvedPayments = payments.filter((p) => p.status === 'APPROVED');
-  const pendingPayments = payments.filter((p) => p.status === 'PENDING');
-  const approvedRevenue = approvedPayments.reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
-  const pendingDueAmount = pendingPayments.reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
-  const banners = getBanners();
-  const totalHomeBanners = banners.filter((b) => b.placement === 'HOME').length;
-  const totalCatBanners = banners.filter((b) => b.placement === 'CATEGORY').length;
-  const homeCount = banners.filter((b) => b.placement === 'HOME' && b.active).length;
-  const catCount = banners.filter((b) => b.placement === 'CATEGORY' && b.active).length;
-
   root.innerHTML = `
     <div class="pane-header">
       <div>
@@ -2192,124 +2302,7 @@ function renderAdminOverview(root) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" class="btn btn-primary" data-jump-section="banners" data-open-banner-add="1">+ Add Banner</button>
         <button type="button" class="btn btn-outline" data-jump-section="payments" data-open-pay-add="1">+ Record Payment</button>
-      </div>
-    </div>
-
-    <div class="kpi-grid kpi-grid-corp">
-      <div class="kpi-card kpi-corp-emerald">
-        <span class="kpi-label">Active Accounts</span>
-        <span class="kpi-value">${activeAccounts.length}</span>
-        <span class="kpi-sub">${techs.length} Total Skill Persons</span>
-      </div>
-      <div class="kpi-card kpi-corp-amber">
-        <span class="kpi-label">New Accounts Pending</span>
-        <span class="kpi-value">${pendingAccounts.length}</span>
-        <span class="kpi-sub">${techs.filter((t) => t.verificationStatus === 'APPROVED').length} Approved Skill Persons</span>
-      </div>
-      <div class="kpi-card kpi-corp-blue">
-        <span class="kpi-label">Old Renewals Due / Pending</span>
-        <span class="kpi-value">${renewalQueue.length}</span>
-        <span class="kpi-sub">${subs.filter((s) => s.renewalStatus === 'ACTIVE').length} Active Pro Renewals</span>
-      </div>
-      <div class="kpi-card kpi-corp-teal">
-        <span class="kpi-label">Payment Received</span>
-        <span class="kpi-value">${fmtRs(approvedRevenue)}</span>
-        <span class="kpi-sub">${approvedPayments.length} Approved Receipts</span>
-      </div>
-      <div class="kpi-card kpi-corp-rose">
-        <span class="kpi-label">Payment Due</span>
-        <span class="kpi-value">${fmtRs(pendingDueAmount)}</span>
-        <span class="kpi-sub">${pendingPayments.length} Pending Verification</span>
-      </div>
-      <div class="kpi-card kpi-corp-indigo">
-        <span class="kpi-label">Total Banners</span>
-        <span class="kpi-value">${banners.length}</span>
-        <span class="kpi-sub">${totalHomeBanners} Home &bull; ${totalCatBanners} Category</span>
-      </div>
-      <div class="kpi-card kpi-corp-mint">
-        <span class="kpi-label">Active Banners</span>
-        <span class="kpi-value">${homeCount + catCount}</span>
-        <span class="kpi-sub">${homeCount} Home &bull; ${catCount} Category Slides</span>
-      </div>
-    </div>
-
-    <div class="admin-card-grid">
-      <div class="admin-card">
-        <div class="info-card-top">
-          <strong>Pending New Accounts (${pendingAccounts.length})</strong>
-          <button type="button" class="btn btn-outline btn-sm" data-jump-section="accounts">Open All</button>
-        </div>
-        ${
-          pendingAccounts.length
-            ? pendingAccounts
-                .slice(0, 4)
-                .map(
-                  (t) => `
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
-                    <div>
-                      <div style="font-weight:700;font-size:13px;">${esc(t.fullName)}</div>
-                      <div style="font-size:11.5px;color:#64748b;">${esc(categoryMeta(t.categoryId).name)} &bull; ${esc(t.workingArea)}</div>
-                    </div>
-                    <div class="table-actions">
-                      <button type="button" class="btn btn-outline btn-sm" data-inspect-tech="${esc(t.userId || t.id)}">Inspect</button>
-                      <button type="button" class="btn btn-success btn-sm" data-quick-approve-tech="${esc(t.userId || t.id)}">Approve</button>
-                    </div>
-                  </div>`
-                )
-                .join('')
-            : '<p style="font-size:12.5px;color:#64748b;margin:4px 0;">All new Skill Person applications are reviewed.</p>'
-        }
-      </div>
-
-      <div class="admin-card">
-        <div class="info-card-top">
-          <strong>After Renew Old — Approve Queue (${renewalQueue.length})</strong>
-          <button type="button" class="btn btn-outline btn-sm" data-jump-section="renewals">Manage Renewals</button>
-        </div>
-        ${
-          renewalQueue.length
-            ? renewalQueue
-                .slice(0, 4)
-                .map(
-                  (s) => `
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
-                    <div>
-                      <div style="font-weight:700;font-size:13px;">${esc(s.providerName)}</div>
-                      <div style="font-size:11.5px;color:#64748b;">
-                        <span class="badge ${statusBadgeClass(s.renewalStatus)}">${esc(s.renewalStatus)}</span>
-                        &bull; ${fmtRs(s.lastPaymentAmount || 499)}
-                      </div>
-                    </div>
-                    <button type="button" class="btn btn-success btn-sm" data-quick-approve-renewal="${esc(s.userId || s.id)}">Approve Renewal</button>
-                  </div>`
-                )
-                .join('')
-            : '<p style="font-size:12.5px;color:#64748b;margin:4px 0;">No pending or expired renewals.</p>'
-        }
-      </div>
-
-      <div class="admin-card">
-        <div class="info-card-top">
-          <strong>Pending Skill Person Payments (${pendingPayments.length})</strong>
-          <button type="button" class="btn btn-outline btn-sm" data-jump-section="payments">All Payments</button>
-        </div>
-        ${
-          pendingPayments.length
-            ? pendingPayments
-                .slice(0, 4)
-                .map(
-                  (p) => `
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
-                    <div>
-                      <div style="font-weight:700;font-size:13px;">${esc(p.providerName)} &bull; ${fmtRs(p.amountPkr)}</div>
-                      <div style="font-size:11.5px;color:#64748b;">${esc(p.paymentMethod)} (${esc(p.transactionRef)})</div>
-                    </div>
-                    <button type="button" class="btn btn-success btn-sm" data-approve-payment="${esc(p.paymentId || p.id)}">Approve</button>
-                  </div>`
-                )
-                .join('')
-            : '<p style="font-size:12.5px;color:#64748b;margin:4px 0;">All payments verified.</p>'
-        }
+        <button type="button" class="btn btn-outline" data-jump-section="accounts_ledger">Open Accounts</button>
       </div>
     </div>
   `;
@@ -3048,6 +3041,603 @@ function renderAdminPayments(root) {
   bindAdminCommonActions(root);
 }
 
+function renderAdminAccountsLedger(root) {
+  const payments = getPayments();
+  const approvedPayments = payments.filter((p) => p.status === 'APPROVED');
+  const heads = getExpenseHeads();
+  const expenses = getExpenses();
+
+  const currKey = getCurrentMonthKey();
+  const lastKey = getLastMonthKey();
+
+  let activeMonthKey = '';
+  if (state.accountsPeriod === 'CURRENT_MONTH') activeMonthKey = currKey;
+  else if (state.accountsPeriod === 'LAST_MONTH') activeMonthKey = lastKey;
+  else if (state.accountsPeriod === 'CUSTOM_MONTH') activeMonthKey = state.accountsSelectedMonth || currKey;
+
+  const paymentMonthKey = (p) => toMonthKey(p.paidAtMillis || p.createdAt || p.createdAtMillis || p.updatedAt);
+  const expenseMonthKey = (e) => toMonthKey(e.monthKey || e.expenseDate || e.createdAt);
+
+  const summarizeMonth = (mk) => {
+    const incRows = mk ? approvedPayments.filter((p) => paymentMonthKey(p) === mk) : approvedPayments;
+    const expRows = mk ? expenses.filter((e) => expenseMonthKey(e) === mk) : expenses;
+    const income = incRows.reduce((acc, p) => acc + (Number(p.amountPkr) || 0), 0);
+    const expense = expRows.reduce((acc, e) => acc + (Number(e.amountPkr) || 0), 0);
+    const profit = income - expense;
+    return { incRows, expRows, income, expense, profit };
+  };
+
+  const currStats = summarizeMonth(currKey);
+  const lastStats = summarizeMonth(lastKey);
+  const activeStats = summarizeMonth(activeMonthKey);
+
+  const monthSet = new Set([currKey, lastKey]);
+  approvedPayments.forEach((p) => {
+    const mk = paymentMonthKey(p);
+    if (mk) monthSet.add(mk);
+  });
+  expenses.forEach((e) => {
+    const mk = expenseMonthKey(e);
+    if (mk) monthSet.add(mk);
+  });
+  const allMonths = Array.from(monthSet).filter(Boolean).sort((a, b) => b.localeCompare(a));
+
+  const filteredExpenses = activeStats.expRows.filter(
+    (e) => state.accountsHeadFilter === 'ALL' || e.headId === state.accountsHeadFilter
+  );
+
+  const periodLabel = activeMonthKey ? fmtMonthLabel(activeMonthKey) : 'All Months';
+  const profitClass = activeStats.profit >= 0 ? 'profit-positive' : 'profit-negative';
+
+  const headTotals = heads.map((h) => {
+    const rows = activeStats.expRows.filter((e) => e.headId === (h.headId || h.id));
+    const total = rows.reduce((acc, e) => acc + (Number(e.amountPkr) || 0), 0);
+    return { head: h, count: rows.length, total };
+  });
+
+  root.innerHTML = `
+    <div class="pane-header">
+      <div>
+        <h2>Accounts — Income, Expenses &amp; Monthly Profit</h2>
+        <p>Income syncs automatically from Approved Skill Person Payments. Add Expense Heads &amp; Expenses to track auto-calculated monthly Profit.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-outline" id="accAddHeadBtn">+ Add Expense Head</button>
+        <button type="button" class="btn btn-primary" id="accAddExpenseBtn">+ Add Expense</button>
+      </div>
+    </div>
+
+    <div class="filter-toolbar">
+      <div class="chip-tabs">
+        <button type="button" class="chip-tab ${state.accountsPeriod === 'CURRENT_MONTH' ? 'active' : ''}" data-acc-period="CURRENT_MONTH">Current Month (${esc(fmtMonthLabel(currKey))})</button>
+        <button type="button" class="chip-tab ${state.accountsPeriod === 'LAST_MONTH' ? 'active' : ''}" data-acc-period="LAST_MONTH">Last Month (${esc(fmtMonthLabel(lastKey))})</button>
+        <button type="button" class="chip-tab ${state.accountsPeriod === 'ALL_TIME' ? 'active' : ''}" data-acc-period="ALL_TIME">All Months</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;font-weight:600;color:#475569;">Pick Month:</label>
+        <input type="month" id="accCustomMonthInput" class="field-input" style="width:auto;padding:6px 10px;" value="${esc(activeMonthKey || state.accountsSelectedMonth || currKey)}" />
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-corp-teal">
+        <span class="kpi-label">Income (${esc(periodLabel)})</span>
+        <span class="kpi-value">${fmtRs(activeStats.income)}</span>
+        <span class="kpi-sub">${activeStats.incRows.length} Approved Payments Received</span>
+      </div>
+      <div class="kpi-card kpi-corp-rose">
+        <span class="kpi-label">Expenses (${esc(periodLabel)})</span>
+        <span class="kpi-value">${fmtRs(activeStats.expense)}</span>
+        <span class="kpi-sub">${activeStats.expRows.length} Expense Entries Logged</span>
+      </div>
+      <div class="kpi-card ${activeStats.profit >= 0 ? 'kpi-corp-emerald' : 'kpi-corp-amber'}">
+        <span class="kpi-label">Net Profit (${esc(periodLabel)})</span>
+        <span class="kpi-value ${profitClass}">${fmtRs(activeStats.profit)}</span>
+        <span class="kpi-sub">Auto-calculated: Income &minus; Expenses</span>
+      </div>
+    </div>
+
+    <div class="accounts-compare-grid">
+      <div class="accounts-month-box current">
+        <div class="info-card-top">
+          <strong style="font-size:13.5px;">Current Month &bull; ${esc(fmtMonthLabel(currKey))}</strong>
+          <button type="button" class="btn btn-outline btn-sm" data-acc-period="CURRENT_MONTH">View Details</button>
+        </div>
+        <div class="accounts-month-metrics">
+          <div class="accounts-metric-cell">
+            <div class="accounts-metric-label">Income</div>
+            <div class="accounts-metric-val">${fmtRs(currStats.income)}</div>
+          </div>
+          <div class="accounts-metric-cell">
+            <div class="accounts-metric-label">Expenses</div>
+            <div class="accounts-metric-val">${fmtRs(currStats.expense)}</div>
+          </div>
+          <div class="accounts-metric-cell">
+            <div class="accounts-metric-label">Profit</div>
+            <div class="accounts-metric-val ${currStats.profit >= 0 ? 'profit-positive' : 'profit-negative'}">${fmtRs(currStats.profit)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="accounts-month-box">
+        <div class="info-card-top">
+          <strong style="font-size:13.5px;">Last Month &bull; ${esc(fmtMonthLabel(lastKey))}</strong>
+          <button type="button" class="btn btn-outline btn-sm" data-acc-period="LAST_MONTH">View Details</button>
+        </div>
+        <div class="accounts-month-metrics">
+          <div class="accounts-metric-cell">
+            <div class="accounts-metric-label">Income</div>
+            <div class="accounts-metric-val">${fmtRs(lastStats.income)}</div>
+          </div>
+          <div class="accounts-metric-cell">
+            <div class="accounts-metric-label">Expenses</div>
+            <div class="accounts-metric-val">${fmtRs(lastStats.expense)}</div>
+          </div>
+          <div class="accounts-metric-cell">
+            <div class="accounts-metric-label">Profit</div>
+            <div class="accounts-metric-val ${lastStats.profit >= 0 ? 'profit-positive' : 'profit-negative'}">${fmtRs(lastStats.profit)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chip-tabs">
+      <button type="button" class="chip-tab ${state.accountsTab === 'SUMMARY' ? 'active' : ''}" data-acc-tab="SUMMARY">Monthly Profit Ledger (${allMonths.length})</button>
+      <button type="button" class="chip-tab ${state.accountsTab === 'INCOME' ? 'active' : ''}" data-acc-tab="INCOME">Income from Payments (${activeStats.incRows.length})</button>
+      <button type="button" class="chip-tab ${state.accountsTab === 'EXPENSES' ? 'active' : ''}" data-acc-tab="EXPENSES">Expense Details (${activeStats.expRows.length})</button>
+      <button type="button" class="chip-tab ${state.accountsTab === 'HEADS' ? 'active' : ''}" data-acc-tab="HEADS">Expense Heads (${heads.length})</button>
+    </div>
+
+    ${
+      state.accountsTab === 'SUMMARY'
+        ? `
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Approved Payments</th>
+                  <th>Total Income</th>
+                  <th>Total Expenses</th>
+                  <th>Auto Profit</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  allMonths.length
+                    ? allMonths
+                        .map((mk) => {
+                          const s = summarizeMonth(mk);
+                          const isCurr = mk === currKey;
+                          const isLast = mk === lastKey;
+                          const tag = isCurr ? ' <span class="badge badge-green">Current</span>' : isLast ? ' <span class="badge badge-amber">Last Month</span>' : '';
+                          return `
+                            <tr>
+                              <td><strong>${esc(fmtMonthLabel(mk))}</strong>${tag}</td>
+                              <td>${s.incRows.length} payment(s)</td>
+                              <td style="font-weight:700;color:#0f766e;">${fmtRs(s.income)}</td>
+                              <td style="font-weight:700;color:#be123c;">${fmtRs(s.expense)}</td>
+                              <td><strong class="${s.profit >= 0 ? 'profit-positive' : 'profit-negative'}">${fmtRs(s.profit)}</strong></td>
+                              <td>
+                                <button type="button" class="btn btn-outline btn-sm" data-acc-pick-month="${esc(mk)}">Inspect Month</button>
+                              </td>
+                            </tr>`;
+                        })
+                        .join('')
+                    : '<tr><td colspan="6" style="text-align:center;color:#64748b;">No monthly records yet.</td></tr>'
+                }
+              </tbody>
+            </table>
+          </div>
+        `
+        : state.accountsTab === 'INCOME'
+        ? `
+          <div class="info-card-top" style="margin-bottom:2px;">
+            <strong style="font-size:13.5px;">Approved Payments Received — ${esc(periodLabel)}</strong>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline btn-sm" data-jump-section="payments">Open Payments Section</button>
+              <button type="button" class="btn btn-primary btn-sm" data-jump-section="payments" data-open-pay-add="1">+ Record Payment</button>
+            </div>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Skill Person</th>
+                  <th>Plan &amp; Category</th>
+                  <th>Method &amp; Ref</th>
+                  <th>Amount Received</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  activeStats.incRows.length
+                    ? activeStats.incRows
+                        .map(
+                          (p) => `
+                          <tr>
+                            <td>${fmtDate(p.createdAt || p.createdAtMillis)}</td>
+                            <td>
+                              <strong>${esc(p.providerName)}</strong>
+                              <div style="font-size:11.5px;color:#64748b;">${esc(p.providerPhone || '')}</div>
+                            </td>
+                            <td>${esc(p.planType)} &bull; ${esc(p.categoryName || 'General')}</td>
+                            <td>${esc(p.paymentMethod)} (${esc(p.transactionRef)})</td>
+                            <td><strong style="color:#0f766e;">${fmtRs(p.amountPkr)}</strong></td>
+                          </tr>`
+                        )
+                        .join('')
+                    : `<tr><td colspan="5" style="text-align:center;color:#64748b;">No approved Skill Person payments found for ${esc(periodLabel)}.</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        `
+        : state.accountsTab === 'EXPENSES'
+        ? `
+          <div class="filter-toolbar">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <label style="font-size:12px;font-weight:600;color:#475569;">Filter by Expense Head:</label>
+              <select id="accHeadFilterSelect" class="field-input" style="width:auto;padding:6px 10px;">
+                <option value="ALL" ${state.accountsHeadFilter === 'ALL' ? 'selected' : ''}>All Heads (${activeStats.expRows.length})</option>
+                ${heads
+                  .map(
+                    (h) =>
+                      `<option value="${esc(h.headId || h.id)}" ${state.accountsHeadFilter === (h.headId || h.id) ? 'selected' : ''}>${esc(h.name)}</option>`
+                  )
+                  .join('')}
+              </select>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="accAddExpenseInlineBtn">+ Add Expense Entry</button>
+          </div>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Expense Head</th>
+                  <th>Details</th>
+                  <th>Method</th>
+                  <th>Amount</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  filteredExpenses.length
+                    ? filteredExpenses
+                        .map(
+                          (ex) => `
+                          <tr>
+                            <td>${fmtDate(ex.expenseDate || ex.createdAt)}</td>
+                            <td><span class="badge badge-gray">${esc(ex.headName || 'Misc')}</span></td>
+                            <td>
+                              <strong>${esc(ex.title)}</strong>
+                              ${ex.notes ? `<div style="font-size:11.5px;color:#64748b;">${esc(ex.notes)}</div>` : ''}
+                            </td>
+                            <td>${esc(ex.paymentMethod || 'Cash')}</td>
+                            <td><strong style="color:#be123c;">${fmtRs(ex.amountPkr)}</strong></td>
+                            <td>
+                              <div class="table-actions">
+                                <button type="button" class="btn btn-outline btn-sm" data-edit-expense="${esc(ex.expenseId || ex.id)}">Edit</button>
+                                <button type="button" class="btn btn-danger btn-sm" data-del-expense="${esc(ex.expenseId || ex.id)}">Delete</button>
+                              </div>
+                            </td>
+                          </tr>`
+                        )
+                        .join('')
+                    : `<tr><td colspan="6" style="text-align:center;color:#64748b;">No expenses recorded for ${esc(periodLabel)}. Click "+ Add Expense" to log one.</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        `
+        : `
+          <div class="expense-head-chip-list">
+            ${
+              headTotals.length
+                ? headTotals
+                    .map(
+                      ({ head, count, total }) => `
+                      <div class="expense-head-card">
+                        <div class="info-card-top">
+                          <strong style="font-size:13.5px;">${esc(head.name)}</strong>
+                          <span class="badge ${head.active !== false ? 'badge-green' : 'badge-gray'}">${head.active !== false ? 'Active' : 'Archived'}</span>
+                        </div>
+                        <div style="font-size:12px;color:#64748b;">${esc(head.description || 'Operational expense head')}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+                          <span style="font-size:12px;font-weight:700;color:#be123c;">${fmtRs(total)} (${count})</span>
+                          <div class="table-actions">
+                            <button type="button" class="btn btn-outline btn-sm" data-edit-head="${esc(head.headId || head.id)}">Edit</button>
+                            <button type="button" class="btn btn-danger btn-sm" data-del-head="${esc(head.headId || head.id)}">Delete</button>
+                          </div>
+                        </div>
+                      </div>`
+                    )
+                    .join('')
+                : '<p style="font-size:12.5px;color:#64748b;">No expense heads added yet.</p>'
+            }
+          </div>
+        `
+    }
+  `;
+
+  document.getElementById('accAddHeadBtn')?.addEventListener('click', () => openExpenseHeadModal(null));
+  document.getElementById('accAddExpenseBtn')?.addEventListener('click', () => openExpenseModal(null));
+  document.getElementById('accAddExpenseInlineBtn')?.addEventListener('click', () => openExpenseModal(null));
+
+  root.querySelectorAll('[data-acc-period]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      state.accountsPeriod = btn.dataset.accPeriod;
+      if (state.accountsPeriod === 'CURRENT_MONTH') state.accountsSelectedMonth = currKey;
+      if (state.accountsPeriod === 'LAST_MONTH') state.accountsSelectedMonth = lastKey;
+      renderAdminPane();
+    })
+  );
+
+  document.getElementById('accCustomMonthInput')?.addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (!val) return;
+    state.accountsPeriod = 'CUSTOM_MONTH';
+    state.accountsSelectedMonth = val.slice(0, 7);
+    renderAdminPane();
+  });
+
+  root.querySelectorAll('[data-acc-tab]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      state.accountsTab = btn.dataset.accTab;
+      renderAdminPane();
+    })
+  );
+
+  root.querySelectorAll('[data-acc-pick-month]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const mk = btn.dataset.accPickMonth;
+      state.accountsSelectedMonth = mk;
+      state.accountsPeriod = mk === currKey ? 'CURRENT_MONTH' : mk === lastKey ? 'LAST_MONTH' : 'CUSTOM_MONTH';
+      state.accountsTab = 'INCOME';
+      renderAdminPane();
+    })
+  );
+
+  document.getElementById('accHeadFilterSelect')?.addEventListener('change', (e) => {
+    state.accountsHeadFilter = e.target.value;
+    renderAdminPane();
+  });
+
+  root.querySelectorAll('[data-edit-expense]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const item = expenses.find((x) => (x.expenseId || x.id) === btn.dataset.editExpense);
+      if (item) openExpenseModal(item);
+    })
+  );
+
+  root.querySelectorAll('[data-del-expense]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.delExpense;
+      if (state.isLiveAdmin) {
+        await deleteExpenseWeb(id);
+      } else {
+        state.data.expenses = (state.data.expenses || []).filter((x) => (x.expenseId || x.id) !== id);
+        persistLocal();
+        renderAll();
+      }
+      showToast('Expense removed');
+    })
+  );
+
+  root.querySelectorAll('[data-edit-head]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const h = heads.find((x) => (x.headId || x.id) === btn.dataset.editHead);
+      if (h) openExpenseHeadModal(h);
+    })
+  );
+
+  root.querySelectorAll('[data-del-head]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.delHead;
+      if (state.isLiveAdmin) {
+        await deleteExpenseHeadWeb(id);
+      } else {
+        state.data.expenseHeads = (state.data.expenseHeads || []).filter((x) => (x.headId || x.id) !== id);
+        persistLocal();
+        renderAll();
+      }
+      showToast('Expense Head deleted');
+    })
+  );
+
+  bindAdminCommonActions(root);
+}
+
+function openExpenseHeadModal(existingHead) {
+  openAdminModal(`
+    <div class="modal-header">
+      <h3>${existingHead ? 'Edit Expense Head' : 'Add New Expense Head'}</h3>
+      <button type="button" class="modal-close-btn" id="closeAdminModalBtn">&times;</button>
+    </div>
+    <form id="expenseHeadForm" style="display:flex;flex-direction:column;gap:12px;">
+      <label class="field-label">
+        Expense Head Name
+        <input type="text" id="expHeadNameInput" class="field-input" required maxlength="60" placeholder="e.g., Office Rent, Ads, Staff Salaries" value="${esc(existingHead?.name || '')}" />
+      </label>
+      <label class="field-label">
+        Description (Optional)
+        <input type="text" id="expHeadDescInput" class="field-input" maxlength="180" placeholder="Short note about this expense category" value="${esc(existingHead?.description || '')}" />
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;">
+        <input type="checkbox" id="expHeadActiveInput" ${existingHead?.active !== false ? 'checked' : ''} />
+        Active Expense Head
+      </label>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+        <button type="button" class="btn btn-outline" id="cancelExpHeadBtn">Cancel</button>
+        <button type="submit" class="btn btn-primary">${existingHead ? 'Save Head' : 'Create Head'}</button>
+      </div>
+    </form>
+  `);
+
+  document.getElementById('closeAdminModalBtn')?.addEventListener('click', closeAdminModal);
+  document.getElementById('cancelExpHeadBtn')?.addEventListener('click', closeAdminModal);
+  document.getElementById('expenseHeadForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('expHeadNameInput').value.trim();
+    const description = document.getElementById('expHeadDescInput').value.trim();
+    const active = document.getElementById('expHeadActiveInput').checked;
+    if (name.length < 2) return showToast('Enter a valid expense head name');
+
+    const headObj = {
+      headId: existingHead?.headId || existingHead?.id || `head_${Date.now()}`,
+      name,
+      description,
+      active
+    };
+
+    try {
+      if (state.isLiveAdmin) {
+        await saveExpenseHeadWeb(headObj);
+      } else {
+        const list = state.data.expenseHeads || [];
+        const idx = list.findIndex((x) => (x.headId || x.id) === headObj.headId);
+        if (idx >= 0) list[idx] = { ...list[idx], ...headObj };
+        else list.push(headObj);
+        state.data.expenseHeads = list;
+        persistLocal();
+      }
+      closeAdminModal();
+      showToast(existingHead ? 'Expense Head updated' : 'Expense Head added');
+      renderAll();
+    } catch (err) {
+      showToast(err?.message || 'Failed to save Expense Head');
+    }
+  });
+}
+
+function openExpenseModal(existingExpense) {
+  const defaultHeads = [
+    { headId: 'head_office', name: 'Office & Workspace', description: 'Co-working, stationery & desk expenses', active: true },
+    { headId: 'head_marketing', name: 'Marketing & Ads', description: 'Social media promotions & print flyers', active: true },
+    { headId: 'head_cloud', name: 'Server & Cloud Tools', description: 'Domain, hosting & software subscriptions', active: true },
+    { headId: 'head_utilities', name: 'Internet & Utilities', description: 'Broadband internet & office electricity', active: true },
+    { headId: 'head_staff', name: 'Staff & Support', description: 'Operations & verification staff payouts', active: true },
+    { headId: 'head_misc', name: 'Miscellaneous', description: 'Other operational expenses', active: true }
+  ];
+  const existingHeads = getExpenseHeads();
+  const heads = existingHeads.length ? existingHeads : defaultHeads;
+  const usingFallbackHeads = existingHeads.length === 0;
+  const defaultDate = existingExpense?.expenseDate || new Date().toISOString().slice(0, 10);
+
+  openAdminModal(`
+    <div class="modal-header">
+      <h3>${existingExpense ? 'Edit Expense Detail' : 'Add New Expense'}</h3>
+      <button type="button" class="modal-close-btn" id="closeAdminModalBtn">&times;</button>
+    </div>
+    <form id="expenseEntryForm" style="display:flex;flex-direction:column;gap:12px;">
+      <label class="field-label">
+        Expense Head
+        <select id="expEntryHeadSelect" class="field-input" required>
+          ${heads
+            .map(
+              (h) =>
+                `<option value="${esc(h.headId || h.id)}" ${(existingExpense?.headId || heads[0]?.headId) === (h.headId || h.id) ? 'selected' : ''}>${esc(h.name)}</option>`
+            )
+            .join('')}
+        </select>
+      </label>
+      <label class="field-label">
+        Expense Title / Description
+        <input type="text" id="expEntryTitleInput" class="field-input" required maxlength="120" placeholder="e.g., Facebook Boost Campaign or Office Internet" value="${esc(existingExpense?.title || '')}" />
+      </label>
+      <div class="field-row">
+        <label class="field-label">
+          Amount (PKR)
+          <input type="number" id="expEntryAmountInput" class="field-input" min="0" step="1" required value="${esc(existingExpense?.amountPkr ?? '')}" placeholder="e.g., 1500" />
+        </label>
+        <label class="field-label">
+          Expense Date
+          <input type="date" id="expEntryDateInput" class="field-input" required value="${esc(defaultDate)}" />
+        </label>
+      </div>
+      <label class="field-label">
+        Payment Method
+        <select id="expEntryMethodSelect" class="field-input">
+          ${['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Card', 'Other']
+            .map((m) => `<option value="${m}" ${(existingExpense?.paymentMethod || 'Cash') === m ? 'selected' : ''}>${m}</option>`)
+            .join('')}
+        </select>
+      </label>
+      <label class="field-label">
+        Notes / Vendor Details (Optional)
+        <textarea id="expEntryNotesInput" class="field-input" rows="2" maxlength="300" placeholder="Invoice #, vendor name, or remarks">${esc(existingExpense?.notes || '')}</textarea>
+      </label>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+        <button type="button" class="btn btn-outline" id="cancelExpEntryBtn">Cancel</button>
+        <button type="submit" class="btn btn-primary">${existingExpense ? 'Update Expense' : 'Save Expense'}</button>
+      </div>
+    </form>
+  `);
+
+  document.getElementById('closeAdminModalBtn')?.addEventListener('click', closeAdminModal);
+  document.getElementById('cancelExpEntryBtn')?.addEventListener('click', closeAdminModal);
+  document.getElementById('expenseEntryForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const headId = document.getElementById('expEntryHeadSelect').value;
+    const head = heads.find((h) => (h.headId || h.id) === headId);
+    const title = document.getElementById('expEntryTitleInput').value.trim();
+    const amountPkr = Math.max(0, Number(document.getElementById('expEntryAmountInput').value) || 0);
+    const expenseDate = document.getElementById('expEntryDateInput').value || defaultDate;
+    const monthKey = expenseDate.slice(0, 7);
+    const paymentMethod = document.getElementById('expEntryMethodSelect').value;
+    const notes = document.getElementById('expEntryNotesInput').value.trim();
+
+    if (title.length < 2) return showToast('Enter an expense title');
+
+    const expenseObj = {
+      expenseId: existingExpense?.expenseId || existingExpense?.id || `exp_${Date.now()}`,
+      headId,
+      headName: head?.name || existingExpense?.headName || 'Misc',
+      title,
+      notes,
+      amountPkr,
+      monthKey,
+      expenseDate,
+      paymentMethod
+    };
+
+    try {
+      if (state.isLiveAdmin) {
+        if (usingFallbackHeads && head) {
+          await saveExpenseHeadWeb(head);
+        }
+        await saveExpenseWeb(expenseObj);
+      } else {
+        if (usingFallbackHeads && head) {
+          state.data.expenseHeads = [head];
+        }
+        const list = state.data.expenses || [];
+        const idx = list.findIndex((x) => (x.expenseId || x.id) === expenseObj.expenseId);
+        if (idx >= 0) list[idx] = { ...list[idx], ...expenseObj };
+        else list.unshift(expenseObj);
+        state.data.expenses = list;
+        persistLocal();
+      }
+      state.accountsTab = 'EXPENSES';
+      state.accountsSelectedMonth = monthKey;
+      state.accountsPeriod = monthKey === getCurrentMonthKey()
+        ? 'CURRENT_MONTH'
+        : monthKey === getLastMonthKey()
+        ? 'LAST_MONTH'
+        : 'CUSTOM_MONTH';
+      closeAdminModal();
+      showToast(existingExpense ? 'Expense updated' : 'Expense saved');
+      renderAll();
+    } catch (err) {
+      showToast(err?.message || 'Failed to save Expense');
+    }
+  });
+}
+
 function renderAdminCategories(root) {
   const categories = getCategories();
   root.innerHTML = `
@@ -3342,15 +3932,17 @@ async function startWebVoiceRecording(target) {
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+    const supportedMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+      .find((m) => MediaRecorder.isTypeSupported(m)) || '';
+    const cleanMime = supportedMime ? supportedMime.split(';')[0] : 'audio/webm';
     const chunks = [];
-    const mr = new MediaRecorder(stream, { mimeType });
+    const mr = supportedMime ? new MediaRecorder(stream, { mimeType: supportedMime }) : new MediaRecorder(stream);
     mr.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) chunks.push(e.data);
     };
     mr.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
-      const blob = new Blob(chunks, { type: mimeType });
+      const blob = new Blob(chunks, { type: cleanMime });
       const previewUrl = URL.createObjectURL(blob);
       const duration = Math.max(1, state.supportRecorder.seconds);
       clearInterval(state.supportRecorder.timerId);
@@ -3360,7 +3952,7 @@ async function startWebVoiceRecording(target) {
         seconds: duration,
         duration,
         blob,
-        mime: mimeType,
+        mime: cleanMime,
         previewUrl,
         mediaRecorder: null,
         stream: null,

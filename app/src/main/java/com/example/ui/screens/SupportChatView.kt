@@ -834,8 +834,10 @@ fun VoiceRecorderBar(
             fontWeight = FontWeight.SemiBold,
           )
         }
-        IconButton(onClick = onStopRecording, modifier = Modifier.testTag("support_voice_stop_button")) {
-          Icon(Icons.Rounded.Stop, contentDescription = "Stop recording", tint = Color(0xFFDC2626))
+        TextButton(onClick = onStopRecording, modifier = Modifier.testTag("support_voice_stop_button")) {
+          Icon(Icons.Rounded.Stop, contentDescription = "Stop recording", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+          Spacer(Modifier.width(4.dp))
+          Text("Stop", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
         }
       } else {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -856,8 +858,10 @@ fun VoiceRecorderBar(
           IconButton(onClick = onDeleteDraft, modifier = Modifier.testTag("support_voice_delete_button")) {
             Icon(Icons.Rounded.Delete, contentDescription = "Delete recording", tint = MaterialTheme.colorScheme.error)
           }
-          IconButton(onClick = onSendVoice, modifier = Modifier.testTag("support_voice_send_button")) {
-            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send voice message", tint = DeepTeal)
+          TextButton(onClick = onSendVoice, modifier = Modifier.testTag("support_voice_send_button")) {
+            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send voice message", tint = DeepTeal, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Send", color = DeepTeal, fontWeight = FontWeight.Bold)
           }
         }
       }

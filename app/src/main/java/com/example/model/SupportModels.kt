@@ -119,6 +119,8 @@ data class PendingSupportMessage(
   val messageType: SupportMessageType,
   val text: String = "",
   val localFileBytes: ByteArray? = null,
+  val uploadedUrl: String = "",
+  val uploadedPath: String = "",
   val attachmentName: String = "",
   val attachmentType: String = "",
   val durationSec: Int = 0,
@@ -132,6 +134,8 @@ data class PendingSupportMessage(
       conversationId == other.conversationId &&
       messageType == other.messageType &&
       text == other.text &&
+      uploadedUrl == other.uploadedUrl &&
+      uploadedPath == other.uploadedPath &&
       isSending == other.isSending &&
       errorMessage == other.errorMessage
   }

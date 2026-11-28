@@ -193,7 +193,16 @@ class SupportRepository(
       throw e
     } catch (e: Exception) {
       Log.e(TAG, "Support attachment upload failed", e)
-      Result.failure(e)
+      val raw = e.localizedMessage.orEmpty()
+      val friendly =
+        if (raw.contains("403") || raw.contains("not authorized", ignoreCase = true) || raw.contains("permission", ignoreCase = true)) {
+          IllegalStateException("Storage permission error: publish storage.rules in Firebase Console -> Storage.")
+        } else if (raw.contains("404") || raw.contains("not exist", ignoreCase = true) || raw.contains("bucket", ignoreCase = true)) {
+          IllegalStateException("Firebase Storage is not initialized in Firebase Console for this project.")
+        } else {
+          e
+        }
+      Result.failure(friendly)
     }
   }
 
@@ -301,6 +310,8 @@ class SupportRepository(
   ): Result<Unit> {
     val convId = conversation.resolvedId
     val path = "support_messages/$messageId"
+    val convRef = db.collection("support_conversations").document(convId)
+    val msgRef = db.collection("support_messages").document(messageId)
     return try {
       val uid = requireUserId()
       val cleanText = text.trim().take(2000)
@@ -310,14 +321,6 @@ class SupportRepository(
         require(attachmentUrl.isNotBlank() && attachmentPath.isNotBlank()) {
           "Attachment upload did not complete."
         }
-      }
-
-      val convRef = db.collection("support_conversations").document(convId)
-      val msgRef = db.collection("support_messages").document(messageId)
-      val existingMsg = msgRef.get().await()
-      if (existingMsg.exists()) {
-        // Idempotent retry protection: already committed
-        return Result.success(Unit)
       }
 
       val preview =
@@ -393,8 +396,17 @@ class SupportRepository(
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      handleFirestoreError(e, OperationType.CREATE, path)
-      Result.failure(e)
+      val alreadyCommitted =
+        (e is FirebaseFirestoreException &&
+          (e.code == FirebaseFirestoreException.Code.ALREADY_EXISTS ||
+            e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)) &&
+          runCatching { msgRef.get().await().exists() }.getOrDefault(false)
+      if (alreadyCommitted) {
+        Result.success(Unit)
+      } else {
+        handleFirestoreError(e, OperationType.CREATE, path)
+        Result.failure(e)
+      }
     }
   }
 

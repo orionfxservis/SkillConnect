@@ -288,6 +288,30 @@ service cloud.firestore {
              );
     }
 
+    function isValidExpenseHead(data) {
+      return data.headId is string && isValidId(data.headId) &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 60 &&
+             data.description is string && data.description.size() <= 180 &&
+             data.active is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidExpense(data) {
+      return data.expenseId is string && isValidId(data.expenseId) &&
+             data.headId is string && isValidId(data.headId) &&
+             data.headName is string && data.headName.size() >= 1 && data.headName.size() <= 60 &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.notes is string && data.notes.size() <= 300 &&
+             (data.amountPkr is int || data.amountPkr is float) && data.amountPkr >= 0 && data.amountPkr <= 10000000 &&
+             data.monthKey is string && data.monthKey.matches('^\\d{4}-\\d{2}$') &&
+             data.expenseDate is string && data.expenseDate.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+             data.paymentMethod in ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Card', 'Other'] &&
+             data.createdBy is string && data.createdBy.size() <= 128 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
     // --- 1. Private User Profiles ---
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -832,7 +856,7 @@ service cloud.firestore {
     // --- 11. In-App Help & Support Conversations (Owner & Verified Admin Only) ---
     match /support_conversations/{conversationId} {
       allow get: if isSignedIn() && isValidId(conversationId) &&
-                    (existing().userId == request.auth.uid || isAdmin());
+                    (resource == null || existing().userId == request.auth.uid || isAdmin());
       allow list: if isBootstrappedAdmin() ||
                      (isSignedIn() && existing().userId == request.auth.uid);
 
@@ -895,7 +919,7 @@ service cloud.firestore {
     // --- 12. In-App Help & Support Messages (Chronological Stream, Anti-Spoofing) ---
     match /support_messages/{messageId} {
       allow get: if isSignedIn() && isValidId(messageId) &&
-                    (existing().conversationOwnerId == request.auth.uid || isAdmin());
+                    (resource == null || existing().conversationOwnerId == request.auth.uid || isAdmin());
       allow list: if isBootstrappedAdmin() ||
                      (isSignedIn() && existing().conversationOwnerId == request.auth.uid);
 
@@ -939,6 +963,66 @@ service cloud.firestore {
                        );
 
       allow delete: if false;
+    }
+
+    // --- 13. Admin Accounts & Expense Ledger (Expense Heads & Monthly Expense Entries) ---
+    match /expense_heads/{headId} {
+      allow get: if isAdmin() && isValidId(headId);
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidId(headId) &&
+                       incoming().headId == headId &&
+                       incoming().keys().hasAll([
+                         'headId', 'name', 'description', 'active', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'headId', 'name', 'description', 'active', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidExpenseHead(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(headId) &&
+                       isValidExpenseHead(incoming()) &&
+                       incoming().headId == existing().headId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'description', 'active', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(headId);
+    }
+
+    match /expenses/{expenseId} {
+      allow get: if isAdmin() && isValidId(expenseId);
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidId(expenseId) &&
+                       incoming().expenseId == expenseId &&
+                       incoming().keys().hasAll([
+                         'expenseId', 'headId', 'headName', 'title', 'notes',
+                         'amountPkr', 'monthKey', 'expenseDate', 'paymentMethod',
+                         'createdBy', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'expenseId', 'headId', 'headName', 'title', 'notes',
+                         'amountPkr', 'monthKey', 'expenseDate', 'paymentMethod',
+                         'createdBy', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidExpense(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(expenseId) &&
+                       isValidExpense(incoming()) &&
+                       incoming().expenseId == existing().expenseId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'headId', 'headName', 'title', 'notes', 'amountPkr',
+                         'monthKey', 'expenseDate', 'paymentMethod', 'updatedAt'
+                       ]);
+
+      allow delete: if isAdmin() && isValidId(expenseId);
     }
   }
 }

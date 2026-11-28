@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.SystemClock
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -40,7 +41,9 @@ class SupportAudioHelper(private val context: Context) {
 
   private var recorder: MediaRecorder? = null
   private var recordTimerJob: Job? = null
+  private var stopDelayJob: Job? = null
   private var currentOutputFile: File? = null
+  private var recordingStartedAtMs: Long = 0L
 
   private var player: MediaPlayer? = null
   private var playTickerJob: Job? = null
@@ -66,6 +69,7 @@ class SupportAudioHelper(private val context: Context) {
         setAudioSource(MediaRecorder.AudioSource.MIC)
         setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
         setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        setAudioChannels(1)
         setAudioSamplingRate(44_100)
         setAudioEncodingBitRate(64_000)
         setMaxDuration(MAX_RECORDING_SECONDS * 1000)
@@ -76,6 +80,7 @@ class SupportAudioHelper(private val context: Context) {
 
       recorder = mr
       currentOutputFile = file
+      recordingStartedAtMs = SystemClock.elapsedRealtime()
       _recorderState.value = AudioRecorderState(isRecording = true, recordingSeconds = 0)
 
       recordTimerJob?.cancel()
@@ -103,6 +108,23 @@ class SupportAudioHelper(private val context: Context) {
   }
 
   fun stopRecording() {
+    if (recorder == null || !_recorderState.value.isRecording) return
+    val elapsedMs = SystemClock.elapsedRealtime() - recordingStartedAtMs
+    if (elapsedMs < 950L) {
+      if (stopDelayJob?.isActive == true) return
+      stopDelayJob =
+        scope.launch {
+          delay(950L - elapsedMs)
+          finishStopRecording()
+        }
+      return
+    }
+    finishStopRecording()
+  }
+
+  private fun finishStopRecording() {
+    stopDelayJob?.cancel()
+    stopDelayJob = null
     recordTimerJob?.cancel()
     recordTimerJob = null
     val elapsed = maxOf(1, _recorderState.value.recordingSeconds)
@@ -126,15 +148,15 @@ class SupportAudioHelper(private val context: Context) {
       } else {
         runCatching { file?.delete() }
         currentOutputFile = null
-        _recorderState.value = AudioRecorderState(errorMessage = "Recording was too short.")
+        _recorderState.value = AudioRecorderState(errorMessage = "Recording was empty. Please try again.")
       }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
       cleanupRecorder()
       runCatching { file?.delete() }
       currentOutputFile = null
       _recorderState.value =
         AudioRecorderState(
-          errorMessage = "Hold at least 1 second to record a voice message."
+          errorMessage = "Unable to finish voice recording. Please try again."
         )
     }
   }

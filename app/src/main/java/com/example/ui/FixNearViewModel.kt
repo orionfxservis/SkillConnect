@@ -1241,10 +1241,10 @@ class FixNearViewModel(
         ?: "You"
 
     viewModelScope.launch {
-      var uploadedUrl = ""
-      var uploadedPath = ""
+      var uploadedUrl = pending.uploadedUrl
+      var uploadedPath = pending.uploadedPath
 
-      if (pending.messageType != SupportMessageType.TEXT) {
+      if (pending.messageType != SupportMessageType.TEXT && (uploadedUrl.isBlank() || uploadedPath.isBlank())) {
         val bytes = pending.localFileBytes
         if (bytes == null || bytes.isEmpty()) {
           _pendingSupportMessages.value =
@@ -1277,6 +1277,11 @@ class FixNearViewModel(
         val pair = uploadResult.getOrThrow()
         uploadedUrl = pair.first
         uploadedPath = pair.second
+        _pendingSupportMessages.value =
+          _pendingSupportMessages.value.map {
+            if (it.messageId == pending.messageId) it.copy(uploadedUrl = uploadedUrl, uploadedPath = uploadedPath)
+            else it
+          }
       }
 
       val result =

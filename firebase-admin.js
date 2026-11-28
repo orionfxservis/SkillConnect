@@ -187,6 +187,8 @@ export function subscribeAdminWorkspace({
   onPayments,
   onSubscriptions,
   onSupportConversations,
+  onExpenseHeads,
+  onExpenses,
   onError
 }) {
   const unsubs = [];
@@ -211,6 +213,12 @@ export function subscribeAdminWorkspace({
   bind('provider_subscriptions', onSubscriptions);
   if (onSupportConversations) {
     bind('support_conversations', onSupportConversations);
+  }
+  if (onExpenseHeads) {
+    bind('expense_heads', onExpenseHeads);
+  }
+  if (onExpenses) {
+    bind('expenses', onExpenses);
   }
 
   return () => unsubs.forEach((fn) => fn());
@@ -575,9 +583,14 @@ export async function uploadSupportAttachmentWeb({ conversationId, ownerUid, blo
     .trim()
     .toLowerCase();
   const fileRef = storageRef(storage, path);
+  const uploaderUid = auth.currentUser?.uid || ownerUid || '';
   await uploadBytes(fileRef, blobOrFile, {
     contentType: cleanMime,
-    customMetadata: { ownerUid: String(ownerUid || '') }
+    customMetadata: {
+      ownerUid: String(ownerUid || ''),
+      conversationId: String(conversationId || ''),
+      uploadedBy: String(uploaderUid)
+    }
   });
   const downloadUrl = await getDownloadURL(fileRef);
   return { downloadUrl, storagePath: path, cleanMime };
@@ -611,8 +624,6 @@ export async function createSupportConversationWeb({
 }) {
   const convRef = doc(db, 'support_conversations', conversationId);
   const msgRef = doc(db, 'support_messages', messageId);
-  const existingMsg = await getDoc(msgRef);
-  if (existingMsg.exists()) return conversationId;
 
   const preview = summarizeSupportPreview(messageType, text);
   const batch = writeBatch(db);
@@ -642,10 +653,10 @@ export async function createSupportConversationWeb({
     senderName: String(userName || 'SkillConnect User').slice(0, 80),
     senderRole: 'User',
     messageType,
-    text: String(text || '').trim().slice(0, 3000),
+    text: String(text || '').trim().slice(0, 2000),
     attachmentUrl: String(attachmentUrl || '').slice(0, 2000),
-    attachmentPath: String(attachmentPath || '').slice(0, 400),
-    attachmentName: String(attachmentName || '').slice(0, 200),
+    attachmentPath: String(attachmentPath || '').slice(0, 300),
+    attachmentName: String(attachmentName || '').slice(0, 180),
     attachmentType: String(attachmentType || '').slice(0, 80),
     duration: Math.max(0, Number(duration) || 0),
     createdAt: serverTimestamp()
@@ -672,8 +683,6 @@ export async function sendSupportMessageWeb({
   const convId = conversation.conversationId || conversation.id;
   const ownerId = conversation.userId;
   const msgRef = doc(db, 'support_messages', messageId);
-  const existingMsg = await getDoc(msgRef);
-  if (existingMsg.exists()) return;
 
   const convRef = doc(db, 'support_conversations', convId);
   const preview = summarizeSupportPreview(messageType, text);
@@ -687,10 +696,10 @@ export async function sendSupportMessageWeb({
     senderName: String(senderName || (senderRole === 'Admin' ? 'Support Team' : 'User')).slice(0, 80),
     senderRole,
     messageType,
-    text: String(text || '').trim().slice(0, 3000),
+    text: String(text || '').trim().slice(0, 2000),
     attachmentUrl: String(attachmentUrl || '').slice(0, 2000),
-    attachmentPath: String(attachmentPath || '').slice(0, 400),
-    attachmentName: String(attachmentName || '').slice(0, 200),
+    attachmentPath: String(attachmentPath || '').slice(0, 300),
+    attachmentName: String(attachmentName || '').slice(0, 180),
     attachmentType: String(attachmentType || '').slice(0, 80),
     duration: Math.max(0, Number(duration) || 0),
     createdAt: serverTimestamp()
@@ -716,7 +725,15 @@ export async function sendSupportMessageWeb({
   }
 
   batch.update(convRef, convUpdate);
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch (err) {
+    try {
+      const snap = await getDoc(msgRef);
+      if (snap.exists()) return;
+    } catch (_) {}
+    throw err;
+  }
 }
 
 export async function markSupportReadWeb({ conversation, messages, viewerRole }) {
@@ -746,4 +763,71 @@ export async function updateSupportConversationAdminWeb({ conversationId, status
     assignedAdminId: String(assignedAdminId || '').slice(0, 128),
     updatedAt: serverTimestamp()
   });
+}
+
+/* ---------- Admin Accounts: Expense Heads & Monthly Expenses ---------- */
+export async function saveExpenseHeadWeb(head) {
+  const headId = String(head.headId || `head_${Date.now()}`)
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 80);
+  const ref = doc(db, 'expense_heads', headId);
+  const existing = await getDoc(ref);
+  const payload = {
+    name: String(head.name || 'Expense').trim().slice(0, 60),
+    description: String(head.description || '').trim().slice(0, 180),
+    active: head.active !== false,
+    updatedAt: serverTimestamp()
+  };
+  if (existing.exists()) {
+    await updateDoc(ref, payload);
+  } else {
+    await setDoc(ref, {
+      headId,
+      ...payload,
+      createdAt: serverTimestamp()
+    });
+  }
+  return headId;
+}
+
+export async function deleteExpenseHeadWeb(headId) {
+  await deleteDoc(doc(db, 'expense_heads', headId));
+}
+
+export async function saveExpenseWeb(expense) {
+  const expenseId = String(expense.expenseId || `exp_${Date.now()}`)
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 80);
+  const ref = doc(db, 'expenses', expenseId);
+  const existing = await getDoc(ref);
+  const expDate = String(expense.expenseDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const monthKey = String(expense.monthKey || expDate.slice(0, 7)).slice(0, 7);
+  const base = {
+    headId: String(expense.headId || 'head_misc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80),
+    headName: String(expense.headName || 'Misc').trim().slice(0, 60),
+    title: String(expense.title || 'Expense').trim().slice(0, 120),
+    notes: String(expense.notes || '').trim().slice(0, 300),
+    amountPkr: Math.max(0, Number(expense.amountPkr) || 0),
+    monthKey,
+    expenseDate: expDate,
+    paymentMethod: String(expense.paymentMethod || 'Cash'),
+    updatedAt: serverTimestamp()
+  };
+  if (existing.exists()) {
+    await updateDoc(ref, base);
+  } else {
+    await setDoc(ref, {
+      expenseId,
+      ...base,
+      createdBy: String(auth.currentUser?.email || ADMIN_EMAIL).slice(0, 128),
+      createdAt: serverTimestamp()
+    });
+  }
+  return expenseId;
+}
+
+export async function deleteExpenseWeb(expenseId) {
+  await deleteDoc(doc(db, 'expenses', expenseId));
 }
